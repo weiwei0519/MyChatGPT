@@ -1,0 +1,4 @@
+# 使用colossalai check -i这个命令来检查目前环境里的版本兼容性以及CUDA Extension的状态
+colossalai check -i
+# 使用colossalai run来启动单节点或者多节点的多进程
+colossalai run
