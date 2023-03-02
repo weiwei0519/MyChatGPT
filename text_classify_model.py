@@ -17,7 +17,7 @@ from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassific
 import torch
 from torch.optim import AdamW
 from utils.dataset_util import TextClassifyDataset
-from train.reward_model_train import model_train
+from train.text_classify_model_train import model_train
 
 # 训练参数
 batch_size = 32
