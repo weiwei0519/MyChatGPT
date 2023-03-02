@@ -31,5 +31,9 @@ while True:
                 presence_penalty=0
             )
             print(start_sequence, response["choices"][0]["text"].strip())
+            # completion = openai.ChatCompletion.create(model='gpt-3.5-turbo',
+            #                                           messages=[{"role": "user", "content": prompt}],
+            #                                           )
+            # print(completion)
         except Exception as exc:  # 捕获异常后打印出来
             print(exc)
