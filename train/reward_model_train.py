@@ -25,7 +25,7 @@ from transformers import get_linear_schedule_with_warmup
 from transformers import TrainingArguments, DataCollatorWithPadding
 from reward_model import RewardModel, RewardModelTrainer
 from utils.dataset_util import dataset_process, TextRewardDataset
-from utils.training_logger import LoggerDisplayer
+from utils.training_logger import LoggerWriter
 from torch_optimizer import Adafactor
 
 # device : GPU or CPU

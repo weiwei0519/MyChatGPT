@@ -16,7 +16,7 @@ import random
 import time
 
 
-class LoggerDisplayer(object):
+class LoggerWriter(object):
 
     def __init__(self, log_path: str, log_name: str, params=[], extention='.png', max_columns=2,
                  log_title=None, figsize=None):
@@ -130,7 +130,7 @@ class LoggerDisplayer(object):
 if __name__ == '__main__':
     n_epochs = 10
     log_path, log_name = './logs', 'xxx_test'
-    displayer = LoggerDisplayer(log_path=log_path, log_name=log_name)
+    displayer = LoggerWriter(log_path=log_path, log_name=log_name)
     for i in range(n_epochs):
         loss, reward = 100 - random.random() * i, random.random() * i
         displayer.add_scalar('loss', loss, i)
