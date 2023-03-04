@@ -37,9 +37,9 @@ batch_size = 4
 epochs = 500
 learning_rate = 1e-5  # 学习率
 context_length = 512
-action = 'train'  # train 训练   validate 测试  prod  生产运行
-pretrained_model_dir = "./models/ChatYuan-large-v1/"
-model_output_dir = "./models/CompanyModel0.1-TTT-Chinese/"
+action = 'validate'  # train 训练   validate 测试  prod  生产运行
+pretrained_model_dir = "./models/ChatYuan-large-v1"
+model_output_dir = "./models/CompanyModel0.1-TTT-Chinese"
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
