@@ -18,7 +18,6 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup
 from torch_optimizer import Adafactor
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-import pandas as pd
 from utils.gpu_track import MemTracker
 import inspect
 import logging

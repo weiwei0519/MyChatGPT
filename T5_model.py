@@ -76,7 +76,7 @@ def train():
     # 数据集
     file = './datasets/company_datasets/text_to_text_dataset.txt'
     lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-    texts_pairs = [[w for w in l.split('：')] for l in lines]
+    texts_pairs = [[w for w in l.split('>>>')] for l in lines]
     source_texts, target_texts = zip(*texts_pairs)
     src_max_len = max([len(text) for text in source_texts])
     tgt_max_len = max([len(text) for text in target_texts])
