@@ -34,10 +34,10 @@ gpu_tracker = MemTracker(frame)
 
 # 训练参数
 batch_size = 4
-epochs = 1000
-learning_rate = 1e-3  # 学习率
+epochs = 500
+learning_rate = 1e-5  # 学习率
 context_length = 512
-action = 'validate'  # train 训练   validate 测试  prod  生产运行
+action = 'train'  # train 训练   validate 测试  prod  生产运行
 pretrained_model_dir = "./models/ChatYuan-large-v1/"
 model_output_dir = "./models/CompanyModel0.1-TTT-Chinese/"
 

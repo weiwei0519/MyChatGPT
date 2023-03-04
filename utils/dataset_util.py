@@ -13,6 +13,8 @@ import torch
 from torch.utils.data import Dataset
 from random import sample
 from datasets import load_dataset
+import numpy as np
+import traceback
 
 
 def preprocess(text):
@@ -265,3 +267,175 @@ class PromptSrcTgtDataset(Dataset):
             "target_ids": target_ids.to(dtype=torch.long),
             "target_ids_y": target_ids.to(dtype=torch.long),
         }
+
+
+class TextRewardDataset(Dataset):
+    """
+    创建一个自定义的数据集，用于训练，Text Reward Model
+
+
+    Args:
+        Texts (dict): 训练数据样本，为 \t 分割的句子list
+                "texts": [
+                            '句子1	句子2	句子3',
+                            '句子1	句子2	句子3',
+                            ...
+                ]
+
+    Returns:
+        dict (Tensor) -> tokenized_output = {
+                            'input_ids': [
+                                            [[101, 3928, ...], [101, 4395, ...], [101, 2135, ...]],
+                                            [[101, 3928, ...], [101, 4395, ...], [101, 2135, ...]],
+                                            ...
+                                        ],
+                            'token_type_ids': [
+                                                [[0, 0, ...], [0, 0, ...], [0, 0, ...]],
+                                                [[0, 0, ...], [0, 0, ...], [0, 0, ...]],
+                                                ...
+                                            ]
+                            'position_ids': [
+                                                [[0, 1, 2, ...], [0, 1, 2, ...], [0, 1, 2, ...]],
+                                                [[0, 1, 2, ...], [0, 1, 2, ...], [0, 1, 2, ...]],
+                                                ...
+                                            ]
+                            'attention_mask': [
+                                                [[1, 1, ...], [1, 1, ...], [1, 1, ...]],
+                                                [[1, 1, ...], [1, 1, ...], [1, 1, ...]],
+                                                ...
+                                            ]
+                        }
+    """
+
+    def __init__(
+            self, texts, tokenizer, max_len
+    ):
+        """
+        Initializes a Dataset class
+        """
+        self.tokenizer = tokenizer
+        self.texts = texts
+        self.max_len = max_len
+
+    def __len__(self):
+        """returns the length of dataframe"""
+
+        return len(self.texts)
+
+    def __getitem__(self, index):
+        """return the input ids, attention masks, position ids and token type ids"""
+        tokenized_output = {
+            'input_ids': [],
+            'token_type_ids': [],
+            'position_ids': [],
+            'attention_mask': []
+        }
+
+        line = self.texts[index]
+        rank_texts = line.strip().split('\t')
+        for rank_text in rank_texts:
+            encode = self.tokenizer.batch_encode_plus(
+                [rank_text],
+                max_length=self.max_len,
+                pad_to_max_length=True,
+                truncation=True,
+                padding="max_length",
+                return_tensors="pt",
+            )
+            if len(tokenized_output['input_ids']) == 0:
+                tokenized_output['input_ids'] = encode['input_ids']
+                tokenized_output['token_type_ids'] = encode['token_type_ids']
+                tokenized_output['attention_mask'] = encode['attention_mask']
+                tokenized_output['position_ids'] = torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])
+            else:
+                tokenized_output['input_ids'] = torch.cat((tokenized_output['input_ids'], encode['input_ids']), dim=0)
+                tokenized_output['token_type_ids'] = torch.cat(
+                    (tokenized_output['token_type_ids'], encode['token_type_ids']),
+                    dim=0)
+                tokenized_output['attention_mask'] = torch.cat(
+                    (tokenized_output['attention_mask'], encode['attention_mask']),
+                    dim=0)
+                tokenized_output['position_ids'] = torch.cat(
+                    (
+                    tokenized_output['position_ids'], torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])),
+                    dim=0)
+
+        return tokenized_output
+
+
+def dataset_process(dataset: dict, tokenizer, max_seq_len: int):
+    """
+    将样本数据转换为模型接收的输入数据。
+
+    Args:
+        dataset (dict): 训练数据样本, e.g. -> {
+                                                "text": [
+                                                            '句子1	句子2	句子3',
+                                                            '句子1	句子2	句子3',
+                                                            ...
+                                                ]
+                                            }
+        dataset 为 \t 分割的句子list
+
+    Returns:
+        dict (str: np.array) -> tokenized_output = {
+                            'input_ids': [
+                                            [[101, 3928, ...], [101, 4395, ...], [101, 2135, ...]],
+                                            [[101, 3928, ...], [101, 4395, ...], [101, 2135, ...]],
+                                            ...
+                                        ],
+                            'token_type_ids': [
+                                                [[0, 0, ...], [0, 0, ...], [0, 0, ...]],
+                                                [[0, 0, ...], [0, 0, ...], [0, 0, ...]],
+                                                ...
+                                            ]
+                            'position_ids': [
+                                                [[0, 1, 2, ...], [0, 1, 2, ...], [0, 1, 2, ...]],
+                                                [[0, 1, 2, ...], [0, 1, 2, ...], [0, 1, 2, ...]],
+                                                ...
+                                            ]
+                            'attention_mask': [
+                                                [[1, 1, ...], [1, 1, ...], [1, 1, ...]],
+                                                [[1, 1, ...], [1, 1, ...], [1, 1, ...]],
+                                                ...
+                                            ]
+                        }
+    """
+    tokenized_output = {
+        'input_ids': [],
+        'token_type_ids': [],
+        'position_ids': [],
+        'attention_mask': []
+    }
+
+    for line in dataset['text']:
+        try:
+            rank_texts = line.strip().split('\t')
+        except:
+            print(f'"{line}" -> {traceback.format_exc()}')
+            exit()
+
+        rank_texts_prop = {
+            'input_ids': [],
+            'token_type_ids': [],
+            'position_ids': [],
+            'attention_mask': []
+        }
+        for rank_text in rank_texts:
+            encoded_inputs = tokenizer(
+                text=rank_text,
+                truncation=True,
+                max_length=max_seq_len,
+                padding='max_length')
+            rank_texts_prop['input_ids'].append(encoded_inputs["input_ids"])
+            rank_texts_prop['token_type_ids'].append(encoded_inputs["token_type_ids"])
+            rank_texts_prop['position_ids'].append([i for i in range(len(encoded_inputs["input_ids"]))])
+            rank_texts_prop['attention_mask'].append(encoded_inputs["attention_mask"])
+
+        for k, v in rank_texts_prop.items():
+            tokenized_output[k].append(v)
+
+    for k, v in tokenized_output.items():
+        tokenized_output[k] = np.array(v)
+
+    return tokenized_output

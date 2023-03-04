@@ -10,7 +10,14 @@
 # Describe: 
 """
 
+import torch
 from torch import nn
+from torch import sigmoid
+from rich import print
+from transformers import AutoModel, AutoTokenizer
+from typing import List
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class RewardModel(nn.Module):
@@ -45,17 +52,18 @@ class RewardModel(nn.Module):
         Returns:
             reward: (batch, 1)
         """
-        pooler_output = self.encoder(
+        encoder_output = self.encoder(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             position_ids=pos_ids,
             attention_mask=attention_mask,
         )["pooler_output"]  # (batch, hidden_size)
-        reward = self.reward_layer(pooler_output)  # (batch, 1)
+        encoder_output = torch.squeeze(encoder_output)
+        reward = self.reward_layer(encoder_output)  # (batch, 1)
         return reward
 
 
-def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]], device='cpu') -> torch.Tensor:
+def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]], device=device) -> torch.Tensor:
     """
     通过给定的有序（从高到低）的ranklist的reward列表，计算rank loss。
     所有排序高的句子的得分减去排序低的句子的得分差的总和，并取负。
@@ -73,14 +81,38 @@ def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]], device='
         loss (torch.tensor): tensor([0.4891], grad_fn=<DivBackward0>)
     """
     if type(rank_rewards_list) != list:
-        raise TypeError(f'@param rank_rewards expected "list", received {type(rank_rewards)}.')
+        raise TypeError(f'@param rank_rewards expected "list", received {type(rank_rewards_list)}.')
 
     loss, add_count = torch.tensor([0]).to(device), 0
     for rank_rewards in rank_rewards_list:
         for i in range(len(rank_rewards) - 1):  # 遍历所有前项-后项的得分差
             for j in range(i + 1, len(rank_rewards)):
-                diff = F.sigmoid(rank_rewards[i] - rank_rewards[j])  # sigmoid到0~1之间
+                diff = sigmoid(rank_rewards[i] - rank_rewards[j])  # sigmoid到0~1之间
                 loss = loss + diff
                 add_count += 1
     loss = loss / add_count
     return -loss
+
+
+if __name__ == '__main__':
+    encoder = AutoModel.from_pretrained('./models/CompanyModel0.1-GPT2-Chinese')
+    model = RewardModel(encoder)
+    tokenizer = AutoTokenizer.from_pretrained('./models/CompanyModel0.1-GPT2-Chinese')
+
+    batch_texts = [
+        ['这是一个测试句子1。', '这是一个测试句子2。', '这是一个测试句子3。', '这是一个测试句子4。'],
+        ['这是一个测试句子5。', '这是一个测试句子6。', '这是一个测试句子7。', '这是一个测试句子8。'],
+    ]
+
+    rank_rewards = []
+    for texts in batch_texts:
+        tmp = []
+        for text in texts:
+            inputs = tokenizer(text, return_tensors='pt')
+            r = model(**inputs)
+            tmp.append(r[0])
+        rank_rewards.append(tmp)
+    print('rank_rewards: ', rank_rewards)
+    loss = compute_rank_list_loss(rank_rewards)
+    print('loss: ', loss.item())
+    loss.backward()
