@@ -52,7 +52,8 @@ config = {
     "cliprange": .2,
     "cliprange_value": .2,
     "vf_coef": .1,
-    "gen_len": 256,
+    "prompt_len": 32,
+    "gen_len": 512,
     "sample_count": 4,
     "save_freq": 5,
     'save_dir': ppo_saved_dir
@@ -120,7 +121,7 @@ for epoch in tqdm(range(total_ppo_epochs)):
                                          truncation=True,
                                          pad_to_max_length=True,
                                          padding='max_length',
-                                         max_length=config['gen_len'],
+                                         max_length=config['prompt_len'],
                                          return_tensors="pt"
                                          )
         ranked_answers = reward_pairs[random_no]["ranked_answers"]

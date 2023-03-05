@@ -61,7 +61,7 @@ class RewardModel(nn.Module):
             position_ids=pos_ids,
             attention_mask=attention_mask,
         )["pooler_output"]  # (batch, hidden_size)
-        encoder_output = torch.squeeze(encoder_output)
+        # encoder_output = torch.squeeze(encoder_output)
         reward = self.reward_layer(encoder_output)  # (batch, 1)
         return reward
 
