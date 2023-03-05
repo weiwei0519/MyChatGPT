@@ -51,4 +51,4 @@ tokenizer._tokenizer.post_processor = BertProcessing(
 )
 tokenizer.enable_truncation(max_length=512)
 
-tokenizer.encode("盛世经典尊享版终身寿险").tokens
+tokenizer.encode("盛世经典尊享版终身寿险").prompt_tokens

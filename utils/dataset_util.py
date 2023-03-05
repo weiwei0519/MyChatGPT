@@ -346,6 +346,7 @@ class TextRewardDataset(Dataset):
                 tokenized_output['input_ids'] = encode['input_ids']
                 tokenized_output['token_type_ids'] = encode['token_type_ids']
                 tokenized_output['attention_mask'] = encode['attention_mask']
+                tokenized_output['position_ids'] = torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])
             else:
                 tokenized_output['input_ids'] = torch.cat((tokenized_output['input_ids'], encode['input_ids']), dim=0)
                 tokenized_output['token_type_ids'] = torch.cat(
@@ -354,6 +355,10 @@ class TextRewardDataset(Dataset):
                 tokenized_output['attention_mask'] = torch.cat(
                     (tokenized_output['attention_mask'], encode['attention_mask']),
                     dim=0)
+                tokenized_output['position_ids'] = torch.cat(
+                    (tokenized_output['position_ids'], torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])),
+                    dim=0
+                )
         return tokenized_output
 
 

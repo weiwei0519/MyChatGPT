@@ -14,10 +14,8 @@ from torch.utils.data import DataLoader, Dataset
 import os
 import time
 import numpy as np
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, DataCollatorWithPadding
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-import pandas as pd
 from utils.gpu_track import MemTracker
 import inspect
 import logging
@@ -156,12 +154,15 @@ def model_train(
         # 用torch实现就是forward，计算loss 8次，然后再optimizer.step()
     )
 
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
     trainer = Trainer(
         model=model,  # the instantiated 🤗 Transformers model to be trained 需要训练的模型
         tokenizer=tokenizer,
         args=training_args,  # training arguments, defined above 训练参数
         train_dataset=dataset,  # training dataset 训练集
         eval_dataset=dataset,  # evaluation dataset 测试集
+        data_collator=data_collator,  # 使用动态padding，节省训练内存占用
         compute_metrics=compute_metrics  # 计算指标方法
     )
 

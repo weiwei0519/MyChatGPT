@@ -15,7 +15,7 @@ from torch import nn
 from torch import sigmoid
 from torch.utils.data import DataLoader, Dataset
 from rich import print
-from transformers import AutoModel, AutoTokenizer, PreTrainedTokenizerBase, TrainerCallback
+from transformers import AutoModel, AutoTokenizer, AutoConfig, PreTrainedTokenizerBase, TrainerCallback
 from typing import List, Union, Optional, Callable, Tuple, Dict
 from transformers import Trainer, TrainingArguments, PreTrainedModel, DataCollator
 from transformers.trainer_utils import EvalPrediction
@@ -110,38 +110,43 @@ class RewardModelTrainer(Trainer):
                 )
                 rank_rewards.append(outputs[0])  # (rank_text_num)
             batch_rank_rewards.append(rank_rewards)  # (batch, rank_text_num)
-        loss = self.compute_rank_list_loss(batch_rank_rewards)[0]
+        loss = compute_rank_list_loss(batch_rank_rewards)[0]
         return (loss, outputs) if return_outputs else loss
 
-    def compute_rank_list_loss(self, rank_rewards_list: List[List[torch.tensor]]) -> torch.Tensor:
-        """
-        通过给定的有序（从高到低）的ranklist的reward列表，计算rank loss。
-        所有排序高的句子的得分减去排序低的句子的得分差的总和，并取负。
 
-        Args:
-            rank_rewards_list (torch.tensor): 有序（从高到低）排序句子的reward列表，e.g. ->
-                                            [
-                                                [torch.tensor([0.3588]), torch.tensor([0.2481]), ...],
-                                                [torch.tensor([0.5343]), torch.tensor([0.2442]), ...],
-                                                ...
-                                            ]
-            device (str): 使用设备
+def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]]) -> torch.Tensor:
+    """
+    通过给定的有序（从高到低）的ranklist的reward列表，计算rank loss。
+    所有排序高的句子的得分减去排序低的句子的得分差的总和，并取负。
 
-        Returns:
-            loss (torch.tensor): tensor([0.4891], grad_fn=<DivBackward0>)
-        """
-        if type(rank_rewards_list) != list:
-            raise TypeError(f'@param rank_rewards expected "list", received {type(rank_rewards_list)}.')
+    Args:
+        rank_rewards_list (torch.tensor): 有序（从高到低）排序句子的reward列表，e.g. ->
+                                        [
+                                            [torch.tensor([0.3588]), torch.tensor([0.2481]), ...],
+                                            [torch.tensor([0.5343]), torch.tensor([0.2442]), ...],
+                                            ...
+                                        ]
+        device (str): 使用设备
 
-        loss, add_count = torch.tensor([0]).to(device), 0
-        for rank_rewards in rank_rewards_list:
-            for i in range(len(rank_rewards) - 1):  # 遍历所有前项-后项的得分差
-                for j in range(i + 1, len(rank_rewards)):
-                    diff = sigmoid(rank_rewards[i] - rank_rewards[j])  # sigmoid到0~1之间
-                    loss = loss + diff
-                    add_count += 1
-        loss = loss / add_count
-        return -loss
+    Returns:
+        loss (torch.tensor): tensor([0.4891], grad_fn=<DivBackward0>)
+    """
+    if type(rank_rewards_list) != list:
+        raise TypeError(f'@param rank_rewards expected "list", received {type(rank_rewards_list)}.')
+
+    loss, add_count = torch.tensor([0]).to(device), 0
+    for rank_rewards in rank_rewards_list:
+        for i in range(len(rank_rewards) - 1):  # 遍历所有前项-后项的得分差
+            for j in range(i + 1, len(rank_rewards)):
+                diff = sigmoid(rank_rewards[i] - rank_rewards[j])  # sigmoid到0~1之间
+                loss = loss + diff
+    # for rank_rewards in rank_rewards_list:
+    #     for i in range(len(rank_rewards) - 1):  # 遍历所有前项-后项的得分差
+    #         diff = sigmoid(rank_rewards[i] - rank_rewards[i + 1])  # sigmoid到0~1之间
+    #         loss = loss + diff
+    #         add_count += 1
+    loss = loss / len(rank_rewards_list)
+    return -loss
 
 
 if __name__ == '__main__':
@@ -163,6 +168,6 @@ if __name__ == '__main__':
             tmp.append(r[0])
         rank_rewards.append(tmp)
     print('rank_rewards: ', rank_rewards)
-    loss = compute_rank_list_loss(rank_rewards)
+    loss = model.compute_rank_list_loss(rank_rewards)
     print('loss: ', loss.item())
     loss.backward()

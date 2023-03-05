@@ -9,7 +9,7 @@
 """
 
 import torch
-from utils.dataset_util import InputOutputDataset, GeneDataset, preprocess, postprocess
+from utils.dataset_util import GeneDataset, preprocess, postprocess
 from torch.utils.data import DataLoader
 from torch import nn
 from torch.nn import Identity
@@ -34,18 +34,19 @@ from typing import Optional, Tuple
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 logging.basicConfig(level=logging.INFO)
 # 追踪GPU Mem的消耗情况。
 frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 16
+batch_size = 32
 epochs = 5000
 learning_rate = 1e-5  # 学习率
 context_length = 512
 action = 'train'  # train 训练   validate 测试  prod  生产运行
-pretrained_model_dir = "./models/bert-base-chinese/"
+pretrained_model_dir = "./models/gpt2-chinese-cluecorpussmall/"
 model_output_dir = "./models/CompanyModel0.1-GPT2-Chinese/"
 
 
@@ -67,37 +68,14 @@ tokenizer类，它存储每个模型的词汇表，并在要输送到模型的�
 from_pretraining()允许您从一个预训练版本实例化一个模型/配置/tokenizer
 save_pretraining()允许您在本地保存模型/配置/tokenizer
 '''
-'''
-config = GPT2Config(
-    architectures=["GPT2LMHeadModel"],   # pretrain的时候用来预加载模型
-    model_type="GPT2LMHeadModel",        # 定义模型类型，导出给`AutoConfig`用，如果要上传到hub请必填
-    tokenizer_class="GPT2Tokenizer",       # 定义tokenizer类型，导出给`AutoTokenizer`用，如果要上传到hub请必填
-    vocab_size=8021,
-    n_positions=1024,
-    n_ctx=1024,
-    n_embd=768,
-    n_layer=6,
-    n_head=6,
-    pad_token_id=tokenizer.pad_token_id,   # 前面构建的tokenizer的 PAD ID
-    task_specific_params={
-        "text-generation": {
-            "do_sample": True,
-            "max_length": 120
-        }
-    }
-)
-'''
 
 
 def train():
     # gpu_tracker.track()
     # 初始化预训练模型
-    # tokenizer = T5Tokenizer.from_pretrained("./models/ChatYuan-large-v1")
-    # config = T5Config.from_pretrained("./models/ChatYuan-large-v1")
-    # model = T5ForConditionalGeneration(config)
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
     config = AutoConfig.from_pretrained(
-        "gpt2",
+        pretrained_model_name_or_path=pretrained_model_dir,
         vocab_size=len(tokenizer),
         n_ctx=context_length,
         bos_token_id=tokenizer.bos_token_id,
@@ -180,7 +158,7 @@ def validate(input_text):
     # 加载预训练模型：
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
     config = AutoConfig.from_pretrained(
-        "gpt2",
+        pretrained_model_name_or_path=pretrained_model_dir,
         vocab_size=len(tokenizer),
         n_ctx=context_length,
         bos_token_id=tokenizer.bos_token_id,
