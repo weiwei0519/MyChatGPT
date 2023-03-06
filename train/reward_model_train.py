@@ -37,7 +37,7 @@ print(device)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"  # 防止GPU内存溢出
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", default="../models/bert-base-chinese", type=str, help="backbone of encoder.")
+parser.add_argument("--model", default="../models/CompanyModel0.1-GPT2-Chinese", type=str, help="backbone of encoder.")
 parser.add_argument("--train_path", default="../datasets/reward_model_dataset/reward_prompt_answer_pairs.json",
                     type=str,
                     help="The path of train set.")
@@ -49,7 +49,7 @@ parser.add_argument("--max_seq_len", default=512, type=int,
                     help="The maximum total input sequence length after tokenization. Sequences longer "
                          "than this will be truncated, sequences shorter will be padded.", )
 parser.add_argument("--batch_size", default=2, type=int, help="Batch size per GPU/CPU for training.", )
-parser.add_argument("--learning_rate", default=5e-3, type=float, help="The initial learning rate for Adam.")
+parser.add_argument("--learning_rate", default=5e-4, type=float, help="The initial learning rate for Adam.")
 parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
 parser.add_argument("--epochs", default=1000, type=int, help="Total number of training epochs to perform.")
 parser.add_argument("--warmup_ratio", default=0.2, type=float, help="Linear warmup over warmup_ratio * total_steps.")
@@ -109,7 +109,8 @@ def evaluate_model(model, data_loader):
 
 def train():
     encoder = AutoModel.from_pretrained(args.model)
-    model = RewardModel(encoder=encoder)
+    config = AutoConfig.from_pretrained(args.model)
+    model = RewardModel(encoder=encoder, config=config)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model_size = sum(t.numel() for t in model.parameters())
     print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
@@ -146,8 +147,9 @@ def train():
     texts = []
     for _, v in prompt_ranked_answers.items():
         text = ""
+        prompt = v['prompt']
         for ranked_answer in v['ranked_answers']:
-            text += ranked_answer + "\t"
+            text += prompt + ranked_answer + "\t"
         texts.append(text)
     train_dataset = TextRewardDataset(texts=texts, tokenizer=tokenizer, max_len=args.max_seq_len)
 
@@ -156,8 +158,9 @@ def train():
     texts = []
     for _, v in prompt_ranked_answers.items():
         text = ""
+        prompt = v['prompt']
         for ranked_answer in v['ranked_answers']:
-            text += ranked_answer + "\t"
+            text += prompt + ranked_answer + "\t"
         texts.append(text)
     val_dataset = TextRewardDataset(texts=texts, tokenizer=tokenizer, max_len=args.max_seq_len)
 
@@ -269,7 +272,7 @@ def train():
                 shutil.rmtree(args.save_dir)
                 os.mkdir(args.save_dir)
                 # 保存新一轮step的模型参数。
-                cur_save_dir = os.path.join(args.save_dir, "model_%d" % global_step)
+                cur_save_dir = os.path.join(args.save_dir, "epoch_%d" % global_step)
                 if not os.path.exists(cur_save_dir):
                     os.makedirs(cur_save_dir)
                 torch.save(model, os.path.join(cur_save_dir, 'model.pt'))

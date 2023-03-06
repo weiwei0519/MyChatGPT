@@ -121,7 +121,7 @@ for epoch in tqdm(range(total_ppo_epochs)):
                                          truncation=True,
                                          pad_to_max_length=True,
                                          padding='max_length',
-                                         max_length=config['prompt_len'],
+                                         max_length=config['gen_len'],
                                          return_tensors="pt"
                                          )
         ranked_answers = reward_pairs[random_no]["ranked_answers"]

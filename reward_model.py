@@ -16,6 +16,7 @@ from torch import sigmoid
 from torch.utils.data import DataLoader, Dataset
 from rich import print
 from transformers import AutoModel, AutoTokenizer, AutoConfig, PreTrainedTokenizerBase, TrainerCallback
+from transformers.models.bert.modeling_bert import BertPooler
 from typing import List, Union, Optional, Callable, Tuple, Dict
 from transformers import Trainer, TrainingArguments, PreTrainedModel, DataCollator
 from transformers.trainer_utils import EvalPrediction
@@ -25,7 +26,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class RewardModel(nn.Module):
 
-    def __init__(self, encoder):
+    def __init__(self, encoder, config):
         """
         init func.
 
@@ -34,6 +35,7 @@ class RewardModel(nn.Module):
         """
         super().__init__()
         self.encoder = encoder
+        self.pooler = BertPooler(config)
         self.reward_layer = nn.Linear(768, 1)  # reward layer 用于映射到 1 维 reward
 
     def forward(
@@ -60,9 +62,11 @@ class RewardModel(nn.Module):
             token_type_ids=token_type_ids,
             position_ids=pos_ids,
             attention_mask=attention_mask,
-        )["pooler_output"]  # (batch, hidden_size)
+        )
+        hidden_state = encoder_output["last_hidden_state"]  # (batch, hidden_size)
+        pooler_output = self.pooler(hidden_state)
         # encoder_output = torch.squeeze(encoder_output)
-        reward = self.reward_layer(encoder_output)  # (batch, 1)
+        reward = self.reward_layer(pooler_output)  # (batch, 1)
         return reward
 
 
@@ -140,12 +144,8 @@ def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]]) -> torch
             for j in range(i + 1, len(rank_rewards)):
                 diff = sigmoid(rank_rewards[i] - rank_rewards[j])  # sigmoid到0~1之间
                 loss = loss + diff
-    # for rank_rewards in rank_rewards_list:
-    #     for i in range(len(rank_rewards) - 1):  # 遍历所有前项-后项的得分差
-    #         diff = sigmoid(rank_rewards[i] - rank_rewards[i + 1])  # sigmoid到0~1之间
-    #         loss = loss + diff
-    #         add_count += 1
-    loss = loss / len(rank_rewards_list)
+                add_count += 1
+    loss = loss / add_count
     return -loss
 
 
