@@ -35,7 +35,7 @@ def compute_metrics(pred):
 
 def model_train(
         tokenizer, model, train_dataset, val_dataset, batch_size, epochs, learning_rate, device,
-        model_dir="./models/Company-RewardModel0.1-Chinese/",
+        model_dir="../models/sentimental-chinese",
         log_dir='./logs/reward_model_train/',
         datasets_dir='./datasets/IMDB_movie/aclImdb/',
 ):
