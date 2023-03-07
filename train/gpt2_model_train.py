@@ -14,7 +14,8 @@ from torch.utils.data import DataLoader, Dataset
 import os
 import time
 import numpy as np
-from transformers import Trainer, TrainingArguments, DataCollatorWithPadding
+from transformers import Trainer, TrainingArguments, DataCollatorWithPadding, get_linear_schedule_with_warmup
+from torch_optimizer import Adafactor
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from utils.gpu_track import MemTracker
 import inspect
@@ -130,18 +131,18 @@ def compute_metrics(pred):
 
 def model_train(
         tokenizer, model, dataset, batch_size, epochs, learning_rate, device,
-        model_dir="./models/CompanyModel0.1-GPT2-Chinese/",
+        model_dir="./models/chatgpt-aia-chinese/gpt-aia-chinese",
         log_dir='./logs/gpt2_train_log/',
         datasets_dir='./datasets/generative_datasets/',
 ):
     # 参数参考这篇文章：https://zhuanlan.zhihu.com/p/363670628
     training_args = TrainingArguments(
-        output_dir='./models/CompanyModel0.1-GPT2-Chinese',  # output directory 结果输出地址
+        output_dir=model_dir,  # output directory 结果输出地址
         num_train_epochs=epochs,  # total # of training epochs 训练总批次
         per_device_train_batch_size=batch_size,  # batch size per device during training 训练批大小
         per_device_eval_batch_size=batch_size,  # batch size for evaluation 评估批大小
         evaluation_strategy="steps",  # Evaluation is done at the end of each epoch. or 10 steps
-        logging_dir='./logs/gpt2_train_log',  # directory for storing logs 日志存储位置
+        logging_dir=log_dir,  # directory for storing logs 日志存储位置
         logging_strategy='epoch',
         learning_rate=learning_rate,  # 学习率
         save_strategy='epoch',  # 不保存检查点
@@ -154,7 +155,32 @@ def model_train(
         # 用torch实现就是forward，计算loss 8次，然后再optimizer.step()
     )
 
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)  # 使用动态padding，节省训练内存占用,
+    # Google AdaFactor：一个省显存的宝藏优化器
+    optimizer = Adafactor(
+        model.parameters(),
+        lr=learning_rate,
+        eps2=(1e-30, 1e-3),
+        clip_threshold=1.0,
+        decay_rate=-0.8,
+        beta1=None,
+        weight_decay=0.0,
+        relative_step=False,
+        scale_parameter=False,
+        warmup_init=False
+    )
+
+    # 学习率变化策略
+    total_steps = 0
+    if len(dataset) % batch_size == 0:
+        total_steps = (len(dataset) // batch_size) * epochs
+    else:
+        total_steps = (len(dataset) // batch_size + 1) * epochs
+    warm_up_ratio = 0.1  # 定义要预热的step
+    lr_scheduler = get_linear_schedule_with_warmup(optimizer,
+                                                   num_warmup_steps=warm_up_ratio * total_steps,
+                                                   num_training_steps=total_steps,
+                                                   )
 
     trainer = Trainer(
         model=model,  # the instantiated 🤗 Transformers model to be trained 需要训练的模型
@@ -162,7 +188,8 @@ def model_train(
         args=training_args,  # training arguments, defined above 训练参数
         train_dataset=dataset,  # training dataset 训练集
         eval_dataset=dataset,  # evaluation dataset 测试集
-        data_collator=data_collator,  # 使用动态padding，节省训练内存占用
+        data_collator=data_collator,  # 使用动态padding，节省训练内存占用,
+        optimizers=(optimizer, lr_scheduler),  # 自定义优化器
         compute_metrics=compute_metrics  # 计算指标方法
     )
 

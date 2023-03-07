@@ -10,24 +10,19 @@
 # Describe:
 """
 import os
-import io
 import time
 import argparse
 import logging
 import json
-from functools import partial
 from tqdm import tqdm
 from rich import print
 import torch
 from torch.utils.data import DataLoader
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModel, AutoConfig, GPT2LMHeadModel
-from transformers import get_linear_schedule_with_warmup, default_data_collator, get_scheduler
-from transformers import TrainingArguments, DataCollatorWithPadding
-from reward_model import RewardModel, RewardModelTrainer, compute_rank_list_loss
-from utils.dataset_util import dataset_process, TextRewardDataset
+from transformers import AutoTokenizer, AutoModel, AutoConfig
+from transformers import default_data_collator, get_scheduler
+from model.reward_model import RewardModel, compute_rank_list_loss
+from utils.dataset_util import TextRewardDataset
 from utils.training_logger import LoggerWriter
-from torch_optimizer import Adafactor
 import shutil
 
 # device : GPU or CPU
@@ -37,13 +32,14 @@ print(device)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"  # 防止GPU内存溢出
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", default="../models/CompanyModel0.1-GPT2-Chinese", type=str, help="backbone of encoder.")
-parser.add_argument("--train_path", default="../datasets/reward_model_dataset/reward_prompt_answer_pairs.json",
+parser.add_argument("--model", default="../models/chatgpt-aia-chinese/gpt-aia-chinese", type=str,
+                    help="backbone of encoder.")
+parser.add_argument("--train_path", default="../datasets/company_dataset/reward_prompt_answer_pairs.json",
                     type=str,
                     help="The path of train set.")
 parser.add_argument("--val_path", default="../datasets/reward_model_dataset/reward_prompt_answer_pairs.json", type=str,
                     help="The path of dev set.")
-parser.add_argument("--save_dir", default="../models/CompanyModel0.1-RewardModel-Chinese", type=str, required=False,
+parser.add_argument("--save_dir", default="../models/chatgpt-aia-chinese/rm-aia-chinese", type=str, required=False,
                     help="The output directory where the model predictions and checkpoints will be written.")
 parser.add_argument("--max_seq_len", default=512, type=int,
                     help="The maximum total input sequence length after tokenization. Sequences longer "

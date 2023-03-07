@@ -11,16 +11,16 @@ import random
 
 from transformers import DataCollatorForLanguageModeling
 
-from utils.calc_tools import (logprobs_from_logits,
-                              whiten,
-                              clip_by_value,
-                              entropy_from_logits,
-                              flatten_dict,
-                              average_torch_dicts,
-                              stats_to_np,
-                              stack_dicts,
-                              add_suffix,
-                              WANDB_PADDING)
+from utils.ppo_calc import (logprobs_from_logits,
+                            whiten,
+                            clip_by_value,
+                            entropy_from_logits,
+                            flatten_dict,
+                            average_torch_dicts,
+                            stats_to_np,
+                            stack_dicts,
+                            add_suffix,
+                            WANDB_PADDING)
 
 
 # Cell
@@ -73,8 +73,8 @@ class PPOModel:
         "cliprange": .2,
         "cliprange_value": .2,
         "vf_coef": .1,
-        "batch_size": 32,
-        "forward_batch_size": 32,
+        "batch_size": 16,
+        "forward_batch_size": 8,
         "ppo_epochs": 10,
     }
 
@@ -163,6 +163,7 @@ class PPOModel:
                                                    responses[idx].unsqueeze(0),
                                                    torch.cat([queries[idx], responses[idx]]).unsqueeze(0))
                 all_stats.append(train_stats)
+                torch.cuda.empty_cache()
         timing['time/ppo/optimize_step'] = time.time() - t
 
         t = time.time()

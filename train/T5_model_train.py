@@ -1,7 +1,7 @@
 # coding=utf-8
 # T5 (Text-To-Text transfer transformer) model train
 """
-# Project Name: MyGPT
+# Project Name: MyChatGPT
 # File Name: T5_model_train
 # Author: NSNP577
 # Creation at 2023/3/1 9:48
@@ -15,7 +15,7 @@ import os
 import time
 import numpy as np
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup
+from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup, DataCollatorWithPadding
 from torch_optimizer import Adafactor
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from utils.gpu_track import MemTracker
@@ -129,7 +129,7 @@ def compute_metrics(pred):
 
 def model_train(
         tokenizer, model, dataset, batch_size, epochs, learning_rate, device,
-        model_dir="./models/CompanyModel0.1-TTT-Chinese",
+        model_dir="./models/chatgpt-aia-chinese/ttt-aia-chinese",
         log_dir='./logs/TTT-train/',
         datasets_dir='./datasets/company_datasets/',
 ):
@@ -178,6 +178,8 @@ def model_train(
                                                    num_warmup_steps=warm_up_ratio * total_steps,
                                                    num_training_steps=total_steps,
                                                    )
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
     trainer = Trainer(
         model=model,  # the instantiated 🤗 Transformers model to be trained 需要训练的模型
         tokenizer=tokenizer,
@@ -185,6 +187,7 @@ def model_train(
         train_dataset=dataset,  # training dataset 训练集
         eval_dataset=dataset,  # evaluation dataset 测试集
         optimizers=(optimizer, lr_scheduler),  # 自定义优化器
+        data_collator=data_collator,  # 使用动态padding，节省训练内存占用
         compute_metrics=compute_metrics  # 计算指标方法
     )
 

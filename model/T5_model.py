@@ -38,8 +38,8 @@ epochs = 500
 learning_rate = 1e-5  # 学习率
 context_length = 512
 action = 'train'  # train 训练   validate 测试  prod  生产运行
-pretrained_model_dir = "./models/ChatYuan-large-v1/"
-model_output_dir = "./models/CompanyModel0.1-TTT-Chinese/"
+pretrained_model_dir = "../models/ChatYuan-large-v1/"
+model_output_dir = "../models/CompanyModel0.1-TTT-Chinese/"
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
@@ -74,7 +74,7 @@ def train():
     # gpu_tracker.track()
 
     # 数据集
-    file = './datasets/company_datasets/text_to_text_dataset.txt'
+    file = '../datasets/company_datasets/text_to_text_dataset.txt'
     lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
     texts_pairs = [[w for w in l.split('>>>')] for l in lines]
     source_texts, target_texts = zip(*texts_pairs)

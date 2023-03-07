@@ -150,9 +150,9 @@ def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]]) -> torch
 
 
 if __name__ == '__main__':
-    encoder = AutoModel.from_pretrained('./models/CompanyModel0.1-GPT2-Chinese')
+    encoder = AutoModel.from_pretrained('../models/chatgpt-aia-chinese/gpt-aia-chinese')
     model = RewardModel(encoder)
-    tokenizer = AutoTokenizer.from_pretrained('./models/CompanyModel0.1-GPT2-Chinese')
+    tokenizer = AutoTokenizer.from_pretrained('../models/chatgpt-aia-chinese/gpt-aia-chinese')
 
     batch_texts = [
         ['这是一个测试句子1。', '这是一个测试句子2。', '这是一个测试句子3。', '这是一个测试句子4。'],

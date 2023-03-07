@@ -1,4 +1,5 @@
 # coding=utf-8
+# GPT2模型结构
 """
 # Project Name: MyGPT
 # File Name: GPT2_model
@@ -24,7 +25,7 @@ from transformers import GPT2LMHeadModel, TextGenerationPipeline, GPT2Tokenizer,
 from transformers import GPT2PreTrainedModel, GPT2Model
 from transformers import top_k_top_p_filtering
 from transformers.modeling_outputs import ModelOutput
-from train.gpt2_train import model_train
+from train.gpt2_model_train import model_train
 import docx2txt
 from utils.gpu_track import MemTracker
 import inspect
@@ -46,8 +47,8 @@ epochs = 5000
 learning_rate = 1e-5  # 学习率
 context_length = 512
 action = 'train'  # train 训练   validate 测试  prod  生产运行
-pretrained_model_dir = "./models/gpt2-chinese-cluecorpussmall/"
-model_output_dir = "./models/CompanyModel0.1-GPT2-Chinese/"
+pretrained_model_dir = "../models/gpt2-chinese-cluecorpussmall/"
+model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
@@ -108,8 +109,7 @@ def train():
     #                              return_tensors="pt").to(device)
     #         dataset.extend(encoding['input_ids'])
     # del doc_texts
-    model_output_dir = "./models/CompanyModel0.1-GPT2-Chinese/"
-    file = './datasets/company_datasets/doc_dataset.txt'
+    file = '../datasets/company_datasets/doc_dataset.txt'
     lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
     texts = [l for l in lines]
     max_len = max([len(text) for text in texts])
@@ -119,25 +119,9 @@ def train():
                             )
     print('dataset''s shape = {0}'.format(train_set.shape))
 
-    # model_output_dir = "./models/CompanyModel0.1-ChatGPT-Chinese/"
-    # file = './datasets/generative_datasets/doc_dataset.txt'
-    # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-    # texts_pairs = [[w for w in l.split('：')] for l in lines]
-    # source_texts, target_texts = zip(*texts_pairs)
-    # src_max_len = max([len(text) for text in source_texts])
-    # tgt_max_len = max([len(text) for text in target_texts])
-    # train_set = InputOutputDataset(tokenizer=tokenizer,
-    #                                source_texts=source_texts,
-    #                                target_texts=target_texts,
-    #                                source_len=src_max_len,
-    #                                target_len=tgt_max_len,
-    #                                )
-    # print('dataset''s shape = {0}, {1}'.format(train_set.source_shape, train_set.target_shape))
-
     # 开始模型训练
     pre = time.time()
     model.train()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)  # 定义优化器
 
     model_train(
         tokenizer=tokenizer,
@@ -156,14 +140,7 @@ def train():
 # 模型测试
 def validate(input_text):
     # 加载预训练模型：
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
-    config = AutoConfig.from_pretrained(
-        pretrained_model_name_or_path=pretrained_model_dir,
-        vocab_size=len(tokenizer),
-        n_ctx=context_length,
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
     model = GPT2LMHeadModel.from_pretrained(model_output_dir,
                                             bos_token_id=tokenizer.bos_token_id,
                                             eos_token_id=tokenizer.eos_token_id,

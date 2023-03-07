@@ -17,9 +17,8 @@ import torch
 from rich import print
 from tqdm import tqdm
 import numpy as np
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-from GPT2_model import GPT2HeadWithValueModel
-from reward_model import RewardModel
+from transformers import AutoTokenizer
+from model.GPT2_model import GPT2HeadWithValueModel
 from model.ppo_model import PPOModel
 from utils.training_logger import LoggerWriter
 import json
@@ -30,11 +29,13 @@ pipe_device = 0 if torch.cuda.is_available() else -1
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 # GPT基础语言模型
-gpt2_model_dir = '../models/CompanyModel0.1-GPT2-Chinese'
+gpt2_model_dir = '../models/chatgpt-aia-chinese/gpt-aia-chinese'
 # 奖惩模型
-reward_model_dir = '../models/CompanyModel0.1-RewardModel-Chinese'
+reward_model_dir = '../models/chatgpt-aia-chinese/rm-aia-chinese'
 # PPO模型输出路径
-ppo_saved_dir = '../models/CompanyModel0.1-PPO-Chinese'
+ppo_saved_dir = '../models/chatgpt-aia-chinese/ppo-aia-chinese'
+# ChatGPT模型输出路径
+chatgpt_model_dir = '../models/chatgpt-aia-chinese'
 
 # model config
 config = {
@@ -53,7 +54,7 @@ config = {
     "cliprange_value": .2,
     "vf_coef": .1,
     "prompt_len": 32,
-    "gen_len": 512,
+    "gen_len": 256,
     "sample_count": 4,
     "save_freq": 5,
     'save_dir': ppo_saved_dir
@@ -102,7 +103,7 @@ reward_pairs_file = '../datasets/reward_model_dataset/reward_prompt_answer_pairs
 content = open(reward_pairs_file, 'r', encoding='utf8').read()
 reward_pairs = json.loads(content)
 del content
-
+last_save_path = ''
 # 开始基于reward_pairs进行PPO训练
 for epoch in tqdm(range(total_ppo_epochs)):
     logs, timing = dict(), dict()
@@ -121,7 +122,7 @@ for epoch in tqdm(range(total_ppo_epochs)):
                                          truncation=True,
                                          pad_to_max_length=True,
                                          padding='max_length',
-                                         max_length=config['gen_len'],
+                                         max_length=config['prompt_len'],
                                          return_tensors="pt"
                                          )
         ranked_answers = reward_pairs[random_no]["ranked_answers"]
@@ -137,9 +138,8 @@ for epoch in tqdm(range(total_ppo_epochs)):
                                              return_tensors="pt"
                                              )
             batch['answer_encoding'].append(answer_encoding)
-    prompt_tensors = [torch.tensor(t['input_ids']).long().to(device) for t in batch["prompt_encoding"]]
-    answer_tensors = [torch.tensor(t['input_ids']).long().to(device) for t in batch["answer_encoding"]]
-    del reward_pairs
+    prompt_tensors = [torch.squeeze(t['input_ids']).long().to(device) for t in batch["prompt_encoding"]]
+    answer_tensors = [torch.squeeze(t['input_ids']).long().to(device) for t in batch["answer_encoding"]]
     timing['time/encode'] = time.time() - t0
 
     # t = time.time()
@@ -183,9 +183,9 @@ for epoch in tqdm(range(total_ppo_epochs)):
     timing['time/epoch'] = time.time() - t0  # logging
     logs.update(timing)
     logs.update(stats)
-    logs['env/reward_mean'] = torch.mean(rewards).cpu().numpy()
-    logs['env/reward_std'] = torch.std(rewards).cpu().numpy()
-    logs['env/reward_dist'] = rewards.cpu().numpy()
+    logs['env/reward_mean'] = torch.mean(rewards_tensor).cpu().numpy()
+    logs['env/reward_std'] = torch.std(rewards_tensor).cpu().numpy()
+    logs['env/reward_dist'] = rewards_tensor.cpu().numpy()
     print(f"epoch {epoch} mean-reward: {logs['env/reward_mean']}")
 
     writer.add_scalar('train/reward', logs['env/reward_mean'], epoch)
@@ -205,3 +205,15 @@ for epoch in tqdm(range(total_ppo_epochs)):
         )
         ppo_model_trainer.model.save_pretrained(cur_save_path)
         ppo_model_trainer.tokenizer.save_pretrained(cur_save_path)
+        if last_save_path == '':
+            last_save_path = cur_save_path
+        else:
+            # 删除上一轮目录，节省磁盘空间
+            os.removedirs(last_save_path)
+            last_save_path = cur_save_path
+
+    torch.cuda.empty_cache()
+
+# 最终模型采用人工反馈的数据，在经过RM + PPO训练优化后，产出chatgpt模型
+ppo_model_trainer.model.save_pretrained(chatgpt_model_dir)
+ppo_model_trainer.tokenizer.save_pretrained(chatgpt_model_dir)

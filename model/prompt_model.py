@@ -17,7 +17,7 @@ from utils.dataset_util import preprocess, postprocess
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 action = 'validate'  # train 训练   validate 测试  prod  生产运行
-model_dir = "./models/CompanyModel0.1-Prompt-Chinese/"
+model_dir = "../models/CompanyModel0.1-Prompt-Chinese/"
 # 模型参数
 context_length = 512
 

@@ -1,5 +1,5 @@
 # coding=UTF-8
-# 训练 ChatGPT 的第二步：reward model——奖励模型
+# 文本情感分类模型
 
 '''
 @File: reward_model
@@ -25,8 +25,8 @@ epochs = 100
 learning_rate = 5e-5  # 学习率
 context_length = 512
 action = 'validate'  # train 训练   validate 测试  prod  生产运行
-Imdb_path = './datasets/IMDB_movie/aclImdb/'
-pretrained_model_dir = "./models/distilbert-base-uncased/"
+Imdb_path = '../datasets/IMDB_movie/aclImdb/'
+pretrained_model_dir = "../models/distilbert-base-uncased/"
 model_output_dir = "./models/Company-RewardModel0.1-Chinese/"
 sample_rate = 0.01  # 样本抽样率，节省训练时间。
 
