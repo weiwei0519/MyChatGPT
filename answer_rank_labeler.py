@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import torch
+import json
 from transformers import AutoTokenizer, GPT2LMHeadModel, TextGenerationPipeline
 
 st.set_page_config(
@@ -24,13 +25,13 @@ st.set_page_config(
     layout="wide"
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 MODEL_CONFIG = {
-    'model_name': './models/CompanyModel0.1-GPT2-Chinese',  # backbone
-    'dataset_file': './datasets/reward_model_dataset/human_rank_pairs.json',  # 标注数据集的存放文件
+    'model_name': './models/chatgpt-aia-chinese',  # backbone
+    'dataset_file': './datasets/company_datasets/human_rank_pairs.json',  # 标注数据集的存放文件
     'rank_list_len': 4,  # 排序列表的长度
-    'max_gen_seq_len': 512,  # 生成答案最大长度
+    'max_gen_seq_len': 300,  # 生成答案最大长度
     'random_prompts': [  # 随机prompt池
         '盛世经典尊享版终身寿险的职业限制',
         '友童乐齿医疗保险，在保险合同有效期内',
@@ -170,17 +171,13 @@ with label_tab:
 
 ######################### 页面定义区（数据集页面） #######################
 with dataset_tab:
-    rank_texts_list = []
-    with open(MODEL_CONFIG['dataset_file'], 'r', encoding='utf8') as f:
-        for i, line in enumerate(f.readlines()):
-            texts = line.strip().split('\t')
-            if len(texts) != MODEL_CONFIG['rank_list_len']:
-                st.warning(
-                    f"error line {i + 1}: expeted {MODEL_CONFIG['rank_list_len']} sentence, got {len(texts)}, skipped.")
-                continue
-            rank_texts_list.append(texts)
-    df = pd.DataFrame(
-        np.array(rank_texts_list),
-        columns=([f'rank {i + 1}' for i in range(MODEL_CONFIG['rank_list_len'])])
-    )
-    st.dataframe(df)
+    file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
+    content = file.read()
+    if len(content) != 0 and content != '':
+        rank_pairs = json.loads(content)
+    else:
+        rank_pairs = {}
+
+    # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
+    # rank_pairs = json.dumps(rank_pairs)
+    json.dump(rank_pairs, file)

@@ -34,10 +34,10 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"  # 防止GPU内�
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", default="../models/chatgpt-aia-chinese/gpt-aia-chinese", type=str,
                     help="backbone of encoder.")
-parser.add_argument("--train_path", default="../datasets/company_dataset/reward_prompt_answer_pairs.json",
+parser.add_argument("--train_path", default="../datasets/company_dataset/human_rank_pairs.json",
                     type=str,
                     help="The path of train set.")
-parser.add_argument("--val_path", default="../datasets/reward_model_dataset/reward_prompt_answer_pairs.json", type=str,
+parser.add_argument("--val_path", default="../datasets/reward_model_dataset/human_rank_pairs.json", type=str,
                     help="The path of dev set.")
 parser.add_argument("--save_dir", default="../models/chatgpt-aia-chinese/rm-aia-chinese", type=str, required=False,
                     help="The output directory where the model predictions and checkpoints will be written.")

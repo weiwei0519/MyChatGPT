@@ -138,7 +138,7 @@ def train():
 
 
 # 模型测试
-def validate(input_text):
+def infer_answer(input_text):
     # 加载预训练模型：
     tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
     model = GPT2LMHeadModel.from_pretrained(model_output_dir,
@@ -354,5 +354,5 @@ if __name__ == '__main__':
             if input_text == "exit":
                 cont = False
             else:
-                output_text = validate(input_text)
+                output_text = infer_answer(input_text)
                 print(output_text)
