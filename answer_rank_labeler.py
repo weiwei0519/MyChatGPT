@@ -33,10 +33,6 @@ MODEL_CONFIG = {
     'rank_list_len': 4,  # 排序列表的长度
     'max_gen_seq_len': 300,  # 生成答案最大长度
     'random_prompts': [  # 随机prompt池
-        '盛世经典尊享版终身寿险的职业限制',
-        '友童乐齿医疗保险，在保险合同有效期内',
-        '传世金生年金保险(分红型)的年金处理方式',
-        '友童乐齿医疗保险是补偿型医疗保险'
     ]
 }
 
@@ -72,7 +68,7 @@ if 'current_results' not in st.session_state:
     st.session_state['current_results'] = [''] * MODEL_CONFIG['rank_list_len']
 
 if 'current_prompt' not in st.session_state:
-    st.session_state['current_prompt'] = '今天早晨我去了'
+    st.session_state['current_prompt'] = '友童乐齿医疗保险，在保险合同有效期内'
 
 
 ######################### 函数定义区 ##############################
@@ -171,13 +167,27 @@ with label_tab:
 
 ######################### 页面定义区（数据集页面） #######################
 with dataset_tab:
-    file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
-    content = file.read()
-    if len(content) != 0 and content != '':
-        rank_pairs = json.loads(content)
-    else:
-        rank_pairs = {}
+    # file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
+    # content = file.read()
+    # if len(content) != 0 and content != '':
+    #     rank_pairs = json.loads(content)
+    # else:
+    #     rank_pairs = {}
+    #
+    # # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
+    # # rank_pairs = json.dumps(rank_pairs)
+    # json.dump(rank_pairs, file)
 
-    # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
-    # rank_pairs = json.dumps(rank_pairs)
-    json.dump(rank_pairs, file)
+    rank_texts_list = []
+    with open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8') as f:
+        for i, line in enumerate(f.readlines()):
+            texts = line.strip().split('\t')
+            if len(texts) != MODEL_CONFIG['rank_list_len']:
+                st.warning(f"error line {i+1}: expeted {MODEL_CONFIG['rank_list_len']} sentence, got {len(texts)}, skipped.")
+                continue
+            rank_texts_list.append(texts)
+    df = pd.DataFrame(
+        np.array(rank_texts_list),
+        columns=([f'rank {i+1}' for i in range(MODEL_CONFIG['rank_list_len'])])
+    )
+    st.dataframe(df)
