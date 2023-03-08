@@ -42,8 +42,8 @@ frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 32
-epochs = 5000
+batch_size = 8
+epochs = 10000
 learning_rate = 1e-5  # 学习率
 context_length = 512
 action = 'train'  # train 训练   validate 测试  prod  生产运行
@@ -88,31 +88,30 @@ def train():
     print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     # gpu_tracker.track()
 
-    # 数据集
-    # 通过新的文本集训练进行微调
-    # doc_path = './datasets/document/'
-    # files = os.listdir(doc_path)
-    # doc_texts = []
-    # for file in files:
-    #     # f = open(doc_path + file, 'r', encoding='UTF-8')
-    #     text = docx2txt.process(doc_path + file)
-    #     doc_texts.append(text.replace("\n\n", "\n"))
-    # for text in doc_texts:
-    #     for i in range(len(text) // max_len):
-    #         # 将字符串分段成长度为max_len为单位
-    #         # dataset.append(tokenizer.encode(text=text[i * max_len:(i + 1) * max_len]))
-    #         text = preprocess(text)
-    #         encoding = tokenizer(text=text[i * max_len:(i + 1) * max_len],
-    #                              truncation=True,
-    #                              padding=True,
-    #                              max_length=max_len,
-    #                              return_tensors="pt").to(device)
-    #         dataset.extend(encoding['input_ids'])
-    # del doc_texts
-    file = '../datasets/company_datasets/doc_dataset.txt'
-    lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-    texts = [l for l in lines]
-    max_len = max([len(text) for text in texts])
+    # doc格式文本数据集
+    doc_path = '../datasets/company_datasets/aiacn/'
+    files = os.listdir(doc_path)
+    texts = []
+    paraphs = []
+    for file in files:
+        # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
+        paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+    # 对于超出content_length限制的文本，需要进行拆分处理。
+    max_len = 0
+    for text in paraphs:
+        if len(text) <= context_length:
+            texts.append(text)
+            if max_len < len(text):
+                max_len = len(text)
+        else:
+            r = 0
+            for i in range(len(text) // context_length):
+                texts.append(text[i * context_length:(i + 1) * context_length])
+                r = i
+            texts.append(text[(r + 1) * context_length:-1])
+            max_len = context_length
+    del paraphs
+    # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,
                             texts=texts,
                             length=max_len

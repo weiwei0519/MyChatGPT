@@ -131,9 +131,8 @@ def compute_metrics(pred):
 
 def model_train(
         tokenizer, model, dataset, batch_size, epochs, learning_rate, device,
-        model_dir="./models/chatgpt-aia-chinese/gpt-aia-chinese",
-        log_dir='./logs/gpt2_train_log/',
-        datasets_dir='./datasets/generative_datasets/',
+        model_dir="../models/chatgpt-aia-chinese/gpt-aia-chinese",
+        log_dir='../logs/gpt2_train_log/',
 ):
     # 参数参考这篇文章：https://zhuanlan.zhihu.com/p/363670628
     training_args = TrainingArguments(

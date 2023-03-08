@@ -156,28 +156,32 @@ with label_tab:
             st.error('请完成排序后再存储！', icon='🚨')
             st.stop()
 
-        with open(MODEL_CONFIG['dataset_file'], 'a', encoding='utf8') as f:
-            rank_texts = []
-            for i in range(len(rank_results)):
-                rank_texts.append(st.session_state['current_results'][rank_results.index(i + 1)])
-            line = '\t'.join(rank_texts)
-            f.write(f'{line}\n')
+        # with open(MODEL_CONFIG['dataset_file'], 'a', encoding='utf8') as f:
+        #     rank_texts = []
+        #     for i in range(len(rank_results)):
+        #         rank_texts.append(st.session_state['current_results'][rank_results.index(i + 1)])
+        #     line = '\t'.join(rank_texts)
+        #     f.write(f'{line}\n')
+
+        file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
+        content = file.read()
+        if len(content) != 0 and content != '':
+            rank_pairs = json.loads(content)
+        else:
+            rank_pairs = {}
+        rank_pairs[len(rank_pairs)]['prompt'] = st.session_state['current_prompt']
+        ranked_answers = []
+        for i in range(len(rank_results)):
+            ranked_answers.append(st.session_state['current_results'][rank_results.index(i + 1)])
+        rank_pairs[len(rank_pairs)]['ranked_answers'] = ranked_answers
+        # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
+        # rank_pairs = json.dumps(rank_pairs)
+        json.dump(rank_pairs, file)
 
         st.success('保存成功，请更换prompt生成新的答案~', icon="✅")
 
 ######################### 页面定义区（数据集页面） #######################
 with dataset_tab:
-    # file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
-    # content = file.read()
-    # if len(content) != 0 and content != '':
-    #     rank_pairs = json.loads(content)
-    # else:
-    #     rank_pairs = {}
-    #
-    # # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
-    # # rank_pairs = json.dumps(rank_pairs)
-    # json.dump(rank_pairs, file)
-
     rank_texts_list = []
     with open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8') as f:
         for i, line in enumerate(f.readlines()):
