@@ -17,8 +17,10 @@ from torch.nn import Identity
 from torch import softmax
 import logging
 import os
+import glob
 import random
 import time
+from random import sample
 from tqdm import tqdm
 import io
 from transformers import GPT2LMHeadModel, TextGenerationPipeline, GPT2Tokenizer, AutoTokenizer, AutoConfig
@@ -46,7 +48,7 @@ batch_size = 8
 epochs = 10000
 learning_rate = 1e-5  # 学习率
 context_length = 512
-action = 'train'  # train 训练   validate 测试  prod  生产运行
+action = 'train'  # train 训练   validate 测试  prod  生产运行  checkpoint  继续训练
 pretrained_model_dir = "../models/gpt2-chinese-cluecorpussmall/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
 
@@ -73,17 +75,27 @@ save_pretraining()允许您在本地保存模型/配置/tokenizer
 
 def train():
     # gpu_tracker.track()
-    # 初始化预训练模型
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
-    config = AutoConfig.from_pretrained(
-        pretrained_model_name_or_path=pretrained_model_dir,
-        vocab_size=len(tokenizer),
-        n_ctx=context_length,
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-    )
-    model = GPT2LMHeadModel(config)
-    model.to(device)
+    # 加载aia预训练模型，若不存在则初始化空模型
+    checkpoint = glob.glob(os.path.join(model_output_dir, 'checkpoint-*'))  # 按照目前trainer的训练输出，只会存在一个checkpoint
+    if len(checkpoint) > 0:
+        checkpoint = (checkpoint[0]).replace("\\", "/")
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        config = AutoConfig.from_pretrained(checkpoint)
+        model = GPT2LMHeadModel.from_pretrained(checkpoint)
+        model.to(device)
+        action = 'checkpoint'
+    else:
+        # 初始化空模型
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
+        config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path=pretrained_model_dir,
+            vocab_size=len(tokenizer),
+            n_ctx=context_length,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        model = GPT2LMHeadModel(config)
+        model.to(device)
     model_size = sum(t.numel() for t in model.parameters())
     print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     # gpu_tracker.track()
@@ -116,6 +128,10 @@ def train():
                             texts=texts,
                             length=max_len
                             )
+    eval_set = GeneDataset(tokenizer=tokenizer,
+                           texts=sample(texts, int(0.1 * len(text))),
+                           length=max_len
+                           )
     print('dataset''s shape = {0}'.format(train_set.shape))
 
     # 开始模型训练
@@ -125,11 +141,13 @@ def train():
     model_train(
         tokenizer=tokenizer,
         model=model,
-        dataset=train_set,
+        train_dataset=train_set,
+        eval_dataset=eval_set,
         batch_size=batch_size,
         epochs=epochs,
         learning_rate=learning_rate,
         device=device,
+        action=action,
         model_dir=model_output_dir,
     )
     # trainer.evaluate()

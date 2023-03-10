@@ -13,7 +13,9 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import os
 import time
+import glob
 import numpy as np
+import shutil
 from transformers import Trainer, TrainingArguments, DataCollatorWithPadding, get_linear_schedule_with_warmup
 from torch_optimizer import Adafactor
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
@@ -130,7 +132,7 @@ def compute_metrics(pred):
 
 
 def model_train(
-        tokenizer, model, dataset, batch_size, epochs, learning_rate, device,
+        tokenizer, model, train_dataset, eval_dataset, batch_size, epochs, learning_rate, device, action,
         model_dir="../models/chatgpt-aia-chinese/gpt-aia-chinese",
         log_dir='../logs/gpt2_train_log/',
 ):
@@ -139,7 +141,7 @@ def model_train(
         output_dir=model_dir,  # output directory 结果输出地址
         num_train_epochs=epochs,  # total # of training epochs 训练总批次
         per_device_train_batch_size=batch_size,  # batch size per device during training 训练批大小
-        per_device_eval_batch_size=batch_size,  # batch size for evaluation 评估批大小
+        per_device_eval_batch_size=1,  # batch size for evaluation 评估批大小
         evaluation_strategy="steps",  # Evaluation is done at the end of each epoch. or 10 steps
         logging_dir=log_dir,  # directory for storing logs 日志存储位置
         logging_strategy='epoch',
@@ -171,10 +173,10 @@ def model_train(
 
     # 学习率变化策略
     total_steps = 0
-    if len(dataset) % batch_size == 0:
-        total_steps = (len(dataset) // batch_size) * epochs
+    if len(train_dataset) % batch_size == 0:
+        total_steps = (len(train_dataset) // batch_size) * epochs
     else:
-        total_steps = (len(dataset) // batch_size + 1) * epochs
+        total_steps = (len(train_dataset) // batch_size + 1) * epochs
     warm_up_ratio = 0.1  # 定义要预热的step
     lr_scheduler = get_linear_schedule_with_warmup(optimizer,
                                                    num_warmup_steps=warm_up_ratio * total_steps,
@@ -185,14 +187,25 @@ def model_train(
         model=model,  # the instantiated 🤗 Transformers model to be trained 需要训练的模型
         tokenizer=tokenizer,
         args=training_args,  # training arguments, defined above 训练参数
-        train_dataset=dataset,  # training dataset 训练集
-        eval_dataset=dataset,  # evaluation dataset 测试集
+        train_dataset=train_dataset,  # training dataset 训练集
+        eval_dataset=eval_dataset,  # evaluation dataset 测试集
         data_collator=data_collator,  # 使用动态padding，节省训练内存占用,
         optimizers=(optimizer, lr_scheduler),  # 自定义优化器
         compute_metrics=compute_metrics  # 计算指标方法
     )
 
-    trainer.train()
+    if action == 'checkpoint':
+        # 从checkpoint断点继续训练
+        trainer.train(resume_from_checkpoint=True)
+    else:
+        # 从头训练
+        trainer.train()
+
+    # 训练结束后，将最后一个checkpoint的整体模型参数文件，复制到model dir output目录
+    checkpoint = glob.glob(os.path.join(model_dir, 'checkpoint-*'))
+    if len(checkpoint) > 0:
+        checkpoint = (checkpoint[0]).replace("\\", "/")
+        shutil.copytree(src=checkpoint, dst=model_dir)
 
     # torch.backends.cudnn.deterministic = True
     #
