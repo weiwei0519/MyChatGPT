@@ -15,11 +15,11 @@ import os
 import time
 import glob
 import numpy as np
-import shutil
 from transformers import Trainer, TrainingArguments, DataCollatorWithPadding, get_linear_schedule_with_warmup
 from torch_optimizer import Adafactor
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from utils.gpu_track import MemTracker
+from utils.file_path_util import move_files
 import inspect
 import logging
 
@@ -205,7 +205,7 @@ def model_train(
     checkpoint = glob.glob(os.path.join(model_dir, 'checkpoint-*'))
     if len(checkpoint) > 0:
         checkpoint = (checkpoint[0]).replace("\\", "/")
-        shutil.copytree(src=checkpoint, dst=model_dir)
+        move_files(src_path=checkpoint, tgt_path=model_dir, replace=True)
 
     # torch.backends.cudnn.deterministic = True
     #
