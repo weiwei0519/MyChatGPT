@@ -75,6 +75,7 @@ save_pretraining()允许您在本地保存模型/配置/tokenizer
 
 def train():
     # gpu_tracker.track()
+    global action
     # 加载aia预训练模型，若不存在则初始化空模型
     checkpoint = glob.glob(os.path.join(model_output_dir, 'checkpoint-*'))  # 按照目前trainer的训练输出，只会存在一个checkpoint
     if len(checkpoint) > 0:
