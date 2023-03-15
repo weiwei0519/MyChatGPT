@@ -322,8 +322,8 @@ if __name__ == '__main__':
     # 处理数据集
     # 请运行以下三行代码进行格式换行，如果你需要全量数据训练。
     # 默认将只使用部分在线的示例数据进行训练。
-    source_file = './datasets/prompt/pCLUE_train.json'
-    target_file = './datasets/prompt/pCLUE_train.csv'
+    source_file = '../datasets/prompt/pCLUE_train.json'
+    target_file = '../datasets/prompt/pCLUE_train.csv'
     convert_json_to_csv(source_file, target_file)
 
     # 训练模型
@@ -331,7 +331,7 @@ if __name__ == '__main__':
     # dataframe必须有2列:
     #   - input: 文本输入
     #   - target: 目标输出
-    df = pd.read_csv('./datasets/prompt/pCLUE_train.csv')  # 数据量：1200k数据。
+    df = pd.read_csv('../datasets/prompt/pCLUE_train.csv')  # 数据量：1200k数据。
     df = df.sample(frac=0.01)  # 测试只取1%作为训练样本
     print("df.head:", df.head(n=5))
     print("df.shape:", df.shape)
