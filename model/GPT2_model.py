@@ -23,19 +23,20 @@ import time
 from random import sample
 from tqdm import tqdm
 import io
-from transformers import GPT2LMHeadModel, TextGenerationPipeline, GPT2Tokenizer, AutoTokenizer, AutoConfig
+from transformers import GPT2LMHeadModel, AutoTokenizer, AutoConfig, pipeline, set_seed, BertTokenizer
 from transformers import GPT2PreTrainedModel, GPT2Model
 from transformers import top_k_top_p_filtering
 from transformers.modeling_outputs import ModelOutput
 from train.gpt2_model_train import model_train
 import docx2txt
+import pandas as pd
 from utils.gpu_track import MemTracker
 import inspect
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 # device : GPU or CPU
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 print(device)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 logging.basicConfig(level=logging.INFO)
@@ -44,13 +45,21 @@ frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 8
+batch_size = 4
 epochs = 10000
 learning_rate = 1e-5  # 学习率
-context_length = 512
-action = 'train'  # train 训练   validate 测试  prod  生产运行  checkpoint  继续训练
-pretrained_model_dir = "../models/gpt2-chinese-cluecorpussmall/"
+max_length = 512
+prompt_length = 50
+action = 'validate'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
+pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
+
+# the eos and bos tokens are defined
+bos = '[endoftext]'
+cls = '[CLS]'
+eos = '[EOS]'
+pad = '[pad]'
+special_tokens_dict = {'eos_token': eos, 'bos_token': bos, 'pad_token': pad, 'cls_token': cls}
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
@@ -75,62 +84,87 @@ save_pretraining()允许您在本地保存模型/配置/tokenizer
 
 def train():
     # gpu_tracker.track()
+    global action
     # 加载aia预训练模型，若不存在则初始化空模型
     checkpoint = glob.glob(os.path.join(model_output_dir, 'checkpoint-*'))  # 按照目前trainer的训练输出，只会存在一个checkpoint
-    if len(checkpoint) > 0:
+    if len(checkpoint) > 0 and action == 'checkpoint':
+        # 从checkpoint断点继续训练
         checkpoint = (checkpoint[0]).replace("\\", "/")
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         config = AutoConfig.from_pretrained(checkpoint)
         model = GPT2LMHeadModel.from_pretrained(checkpoint)
         model.to(device)
-        action = 'checkpoint'
+    elif action == 'fine-tuning':
+        # 对GPT2模型进行调优
+        tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
+        config = AutoConfig.from_pretrained(model_output_dir)
+        model = GPT2LMHeadModel.from_pretrained(model_output_dir)
     else:
         # 初始化空模型
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
+        # tokenizer.padding_side = 'right'
         config = AutoConfig.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_dir,
             vocab_size=len(tokenizer),
-            n_ctx=context_length,
+            n_ctx=max_length,
             bos_token_id=tokenizer.bos_token_id,
             eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
         )
-        model = GPT2LMHeadModel(config)
+        # the pre-trained model is loaded with the custom configuration
+        # model = GPT2LMHeadModel(config)
+        model = GPT2LMHeadModel.from_pretrained(pretrained_model_dir, config=config)
+        num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+        # the model embedding is resized
+        model.resize_token_embeddings(len(tokenizer))
         model.to(device)
+
     model_size = sum(t.numel() for t in model.parameters())
     print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     # gpu_tracker.track()
 
-    # doc格式文本数据集
-    doc_path = '../datasets/company_datasets/aiacn/'
-    files = os.listdir(doc_path)
+    # 初始训练，基于原始doc格式文本数据集进行GPT模型训练
     texts = []
     paraphs = []
-    for file in files:
-        # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-        paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+    if action == 'train' or action == 'checkpoint':
+        doc_path = '../datasets/company_datasets/aiacn/'
+        files = os.listdir(doc_path)
+        for file in files:
+            paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+    elif action == 'fine-tuning':
+        doc_path = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
+        content = pd.read_excel(doc_path)
+        print(content.head(5))
+        text_pairs = content.iloc[:, [0, 1]]
+        source_texts = content.iloc[:, 0].values.tolist()
+        target_texts = content.iloc[:, 1].values.tolist()
+        paraphs = [src + tgt for src, tgt in zip(source_texts, target_texts)]
+
     # 对于超出content_length限制的文本，需要进行拆分处理。
-    max_len = 0
     for text in paraphs:
-        if len(text) <= context_length:
-            texts.append(text)
-            if max_len < len(text):
-                max_len = len(text)
+        text = "".join(text.split())  # 去掉空格
+        length = len(text) + 2  # 需要加上bos和eos的长度
+        if length <= max_length:
+            texts.append(cls + text + eos + pad * (max_length - length))
         else:
             r = 0
-            for i in range(len(text) // context_length):
-                texts.append(text[i * context_length:(i + 1) * context_length])
+            for i in range(length // max_length):
+                if i == 0:
+                    texts.append(cls + text[0:max_length - 1])
+                else:
+                    texts.append(text[i * max_length - 1:(i + 1) * max_length - 1])
                 r = i
-            texts.append(text[(r + 1) * context_length:-1])
-            max_len = context_length
+            texts.append(text[(r + 1) * max_length - 1:-1] + eos + pad * (
+                    max_length - 1 - len(text[(r + 1) * max_length - 1:-1])))
     del paraphs
     # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,
                             texts=texts,
-                            length=max_len
+                            length=max_length
                             )
     eval_set = GeneDataset(tokenizer=tokenizer,
                            texts=sample(texts, int(0.1 * len(text))),
-                           length=max_len
+                           length=max_length
                            )
     print('dataset''s shape = {0}'.format(train_set.shape))
 
@@ -155,41 +189,43 @@ def train():
 
 
 # 模型测试
-def infer_answer(input_text):
-    # 加载预训练模型：
-    tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
-    model = GPT2LMHeadModel.from_pretrained(model_output_dir,
-                                            bos_token_id=tokenizer.bos_token_id,
-                                            eos_token_id=tokenizer.eos_token_id,
-                                            pad_token_id=tokenizer.eos_token_id)
-    model.to(device)
+def infer_answer(input_text, tokenizer, model, do_sample, return_seqs=1):
+    '''sample：是否抽样。生成任务，可以设置为True;
+    top_p：0-1之间，生成的内容越多样'''
+    top_p = 1  # 已知生成各个词的总概率是1（即默认是1.0）如果top_p小于1，则从高到低累加直到top_p，取这前N个词作为候选。
+    temperature = 0.7  # 默认是1.0，温度越低（小于1），softmax输出的贫富差距越大；温度越高，softmax差距越小。
+    text = preprocess(input_text)
+    input_ids = tokenizer.encode(text, return_tensors='pt').to(device)
+    generated_text_samples = model.generate(input_ids,
+                                            max_length=max_length,
+                                            num_beams=return_seqs,
+                                            no_repeat_ngram_size=2,
+                                            do_sample=do_sample,
+                                            num_return_sequences=return_seqs,
+                                            early_stopping=True,
+                                            )
+    predict_texts = []
+    for i, beam in enumerate(generated_text_samples):
+        output_text = tokenizer.decode(beam, skip_special_tokens=True)
+        # 替换special token
+        output_text = output_text[0].replace(cls, '').replace(eos, '').replace(pad, '')
+        predict_text = postprocess(output_text)
+        predict_texts.append("".join(predict_text[i].split()) for i in range(len(predict_text)))
 
-    def answer(text, sample=True, top_p=1, temperature=0.7):
-        '''sample：是否抽样。生成任务，可以设置为True;
-        top_p：0-1之间，生成的内容越多样'''
-        text = preprocess(text)
-        encoding = tokenizer(text=[text],
-                             truncation=True,
-                             pad_to_max_length=True,
-                             padding='max_length',
-                             max_length=context_length,
-                             return_tensors="pt").to(device)
 
-        if not sample:
-            out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False,
-                                 max_new_tokens=512,
-                                 num_beams=1, length_penalty=0.6)
-        else:
-            out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False,
-                                 max_new_tokens=512,
-                                 do_sample=True, top_p=top_p, temperature=temperature,
-                                 no_repeat_ngram_size=3)
-        out_text = tokenizer.batch_decode(out["sequences"], skip_special_tokens=True)
-        return postprocess(out_text[0])
-
-    total_predicted_text = answer(input_text)
-
-    return "".join(total_predicted_text.split())
+def answer(text, sample=True, top_p=1, temperature=0.7):
+    '''sample：是否抽样。生成任务，可以设置为True;
+    top_p：0-1之间，生成的内容越多样'''
+    text = preprocess(text)
+    encoding = tokenizer(text=[text], truncation=True, padding=True, max_length=768, return_tensors="pt").to(device)
+    if not sample:
+        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
+                             num_beams=1, length_penalty=0.6)
+    else:
+        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
+                             do_sample=True, top_p=top_p, temperature=temperature, no_repeat_ngram_size=3)
+    out_text = tokenizer.batch_decode(out["sequences"], skip_special_tokens=True)
+    return postprocess(out_text[0])
 
 
 @dataclass
@@ -361,15 +397,41 @@ def respond_to_batch(model, queries, txt_len=20, top_k=0, top_p=1.0):
 
 
 if __name__ == '__main__':
-    if action == 'train':
+    if action == 'train' or action == 'checkpoint' or action == 'fine-tuning':
         train()
     elif action == 'validate':
+        # 加载预训练模型：
+        tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
+        model = GPT2LMHeadModel.from_pretrained(model_output_dir)
+        model.to(device)
+        # generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
+        set_seed(42)
         cont = True
         while cont:
+            sep = 80
             input_text = str(input("请输入/Please input： "))
 
             if input_text == "exit":
                 cont = False
             else:
-                output_text = infer_answer(input_text)
-                print(output_text)
+                # output_text = infer_answer(input_text,
+                #                            tokenizer=tokenizer,
+                #                            model=model,
+                #                            do_sample=False,
+                #                            return_seqs=1,
+                #                            )
+                output_text = answer(input_text)
+                if isinstance(output_text, list):
+                    for text in output_text:
+                        idx = 0
+                        for i in range(len(text) // sep):
+                            print(text[i * sep:(i + 1) * sep])
+                            idx = i + 1
+                        print(text[idx * sep:-1])
+                else:
+                    idx = 0
+                    for i in range(len(output_text) // sep):
+                        print(output_text[i * sep:(i + 1) * sep])
+                        idx = i + 1
+                    print(output_text[idx * sep:-1])
+                # print(output_text)

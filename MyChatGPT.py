@@ -16,7 +16,7 @@ import logging
 import random
 from utils.dataset_util import preprocess, postprocess
 from utils.NLP import language, is_company_prompt
-import gradio as gr
+# import gradio as gr
 
 print(torch.version.cuda)
 
@@ -24,7 +24,7 @@ print(torch.version.cuda)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 logging.basicConfig(level=logging.INFO)
-ui = 'chatbot'  # chatbot聊天网页模式，command命令行模式
+ui = 'command'  # chatbot聊天网页模式，command命令行模式
 
 # 加载中文对话模型
 # 微信搜索小程序“元语智能”
@@ -64,7 +64,10 @@ context_length = 512
 #                                         pad_token_id=tokenizer_company.eos_token_id)
 # model_company.to(device)
 
-def infer_answer(text: str) -> str:
+def infer_answer(text,
+                 model=model_cn_chatgpt,
+                 tokenizer=tokenizer_cn_chatgpt,
+                 ):
     text = preprocess(text)
     # encode context the generation is conditioned on
     encoding = tokenizer_cn_chatgpt(text=[text],
@@ -137,7 +140,7 @@ if __name__ == '__main__':
                 lang = language(input_text)
                 # intent = intent_judge(input_text)
                 if lang == 'cn':
-                    output_text = infer_answer(model=model_cn_chatgpt, tokenizer=tokenizer_cn_chatgpt, text=input_text)
+                    output_text = infer_answer(text=input_text, model=model_cn_chatgpt, tokenizer=tokenizer_cn_chatgpt)
                     print(output_text)
                 elif lang == 'en':
                     # output = text_generator_en_gpt2(input_text, max_length=max_length, do_sample=True)[0]

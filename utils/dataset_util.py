@@ -12,7 +12,6 @@
 import torch
 from torch.utils.data import Dataset
 from random import sample
-from datasets import load_dataset
 import numpy as np
 import traceback
 
@@ -146,11 +145,19 @@ class GeneDataset(Dataset):
         text_encoder = self.tokenizer.batch_encode_plus(
             [text],
             max_length=self.max_len,
-            pad_to_max_length=True,
-            truncation=True,
-            padding="max_length",
+            # pad_to_max_length=True,
+            # truncation=True,
+            # padding="max_length",
             return_tensors="pt",
         )
+        # text_encoder = self.tokenizer.batch_encode_plus(
+        #     [text],
+        #     max_length=self.max_len,
+        #     pad_to_max_length=True,
+        #     truncation=True,
+        #     padding="max_length",
+        #     return_tensors="pt",
+        # )
         text_encoder.data['labels'] = text_encoder.data['input_ids']  # 文本生成的自回归任务。
 
         return text_encoder.data
@@ -333,32 +340,52 @@ class TextRewardDataset(Dataset):
 
         line = self.texts[index]
         rank_texts = line.strip().split('\t')
+        rank_texts_prop = {
+            'input_ids': [],
+            'token_type_ids': [],
+            'position_ids': [],
+            'attention_mask': []
+        }
         for rank_text in rank_texts:
-            encode = self.tokenizer.batch_encode_plus(
-                [rank_text],
-                max_length=self.max_len,
-                pad_to_max_length=True,
+            encoded_inputs = self.tokenizer(
+                text=rank_text,
                 truncation=True,
-                padding="max_length",
-                return_tensors="pt",
-            )
-            if len(tokenized_output['input_ids']) == 0:
-                tokenized_output['input_ids'] = encode['input_ids']
-                tokenized_output['token_type_ids'] = encode['token_type_ids']
-                tokenized_output['attention_mask'] = encode['attention_mask']
-                tokenized_output['position_ids'] = torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])
-            else:
-                tokenized_output['input_ids'] = torch.cat((tokenized_output['input_ids'], encode['input_ids']), dim=0)
-                tokenized_output['token_type_ids'] = torch.cat(
-                    (tokenized_output['token_type_ids'], encode['token_type_ids']),
-                    dim=0)
-                tokenized_output['attention_mask'] = torch.cat(
-                    (tokenized_output['attention_mask'], encode['attention_mask']),
-                    dim=0)
-                tokenized_output['position_ids'] = torch.cat(
-                    (tokenized_output['position_ids'], torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])),
-                    dim=0
-                )
+                max_length=self.max_len,
+                padding='max_length')
+            rank_texts_prop['input_ids'].append(encoded_inputs["input_ids"])
+            rank_texts_prop['token_type_ids'].append(encoded_inputs["token_type_ids"])
+            rank_texts_prop['position_ids'].append([i for i in range(len(encoded_inputs["input_ids"]))])
+            rank_texts_prop['attention_mask'].append(encoded_inputs["attention_mask"])
+
+        for k, v in rank_texts_prop.items():
+            tokenized_output[k].append(v)
+
+        # for rank_text in rank_texts:
+        #     encode = self.tokenizer.batch_encode_plus(
+        #         [rank_text],
+        #         max_length=self.max_len,
+        #         pad_to_max_length=True,
+        #         truncation=True,
+        #         padding="max_length",
+        #         return_tensors="pt",
+        #     )
+        #     if len(tokenized_output['input_ids']) == 0:
+        #         tokenized_output['input_ids'] = encode['input_ids']
+        #         tokenized_output['token_type_ids'] = encode['token_type_ids']
+        #         tokenized_output['attention_mask'] = encode['attention_mask']
+        #         tokenized_output['position_ids'] = torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])
+        #     else:
+        #         tokenized_output['input_ids'] = torch.cat((tokenized_output['input_ids'], encode['input_ids']), dim=0)
+        #         tokenized_output['token_type_ids'] = torch.cat(
+        #             (tokenized_output['token_type_ids'], encode['token_type_ids']),
+        #             dim=0)
+        #         tokenized_output['attention_mask'] = torch.cat(
+        #             (tokenized_output['attention_mask'], encode['attention_mask']),
+        #             dim=0)
+        #         tokenized_output['position_ids'] = torch.cat(
+        #             (tokenized_output['position_ids'], torch.tensor([[i for i in range(encode['input_ids'].shape[1])]])),
+        #             dim=0
+        #         )
         return tokenized_output
 
 
