@@ -35,7 +35,7 @@ class RewardModel(nn.Module):
         """
         super().__init__()
         self.encoder = encoder
-        self.pooler = BertPooler(config)
+        # self.pooler = BertPooler(config)
         self.reward_layer = nn.Linear(768, 1)  # reward layer 用于映射到 1 维 reward
 
     def forward(
@@ -57,15 +57,12 @@ class RewardModel(nn.Module):
         Returns:
             reward: (batch, 1)
         """
-        encoder_output = self.encoder(
+        pooler_output = self.encoder(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             position_ids=pos_ids,
             attention_mask=attention_mask,
-        )
-        hidden_state = encoder_output["last_hidden_state"]  # (batch, hidden_size)
-        pooler_output = self.pooler(hidden_state)
-        # encoder_output = torch.squeeze(encoder_output)
+        )["pooler_output"]  # (batch, hidden_size)
         reward = self.reward_layer(pooler_output)  # (batch, 1)
         return reward
 
@@ -104,18 +101,19 @@ class RewardModelTrainer(Trainer):
             rank_texts_count = len(inputs['input_ids'][batch_idx])
             rank_rewards = []
             for text_idx in range(rank_texts_count):
-                # call model forward
-                outputs = model(
+                # call model forward to calculate reward score of each text-pairs
+                reward = model(
                     input_ids=inputs['input_ids'][batch_idx][text_idx].unsqueeze(dim=0).to(device),
                     token_type_ids=inputs['token_type_ids'][batch_idx][text_idx].unsqueeze(dim=0).to(device),
                     attention_mask=inputs['attention_mask'][batch_idx][text_idx].unsqueeze(dim=0).to(device),
-                    pos_ids=torch.tensor([[i for i in range(inputs['input_ids'].shape[2])]]).to(device),
+                    pos_ids=inputs['position_ids'][batch_idx][text_idx].unsqueeze(dim=0).to(device)
+                    # pos_ids=torch.tensor([[i for i in range(inputs['input_ids'].shape[2])]]).to(device),
                     # pos_ids.shape = (batch, texts, tokens)
                 )
-                rank_rewards.append(outputs[0])  # (rank_text_num)
+                rank_rewards.append(reward[0])  # (rank_text_num)
             batch_rank_rewards.append(rank_rewards)  # (batch, rank_text_num)
         loss = compute_rank_list_loss(batch_rank_rewards)[0]
-        return (loss, outputs) if return_outputs else loss
+        return (loss, reward) if return_outputs else loss
 
 
 def compute_rank_list_loss(rank_rewards_list: List[List[torch.tensor]]) -> torch.Tensor:

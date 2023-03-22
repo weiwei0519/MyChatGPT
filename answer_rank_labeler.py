@@ -10,30 +10,29 @@
 '''
 
 import os
-import random
 
-import numpy as np
-import pandas as pd
 import streamlit as st
 import torch
 import json
+from PIL import Image
 from transformers import AutoTokenizer, GPT2LMHeadModel, TextGenerationPipeline
+from transformers import T5ForConditionalGeneration, T5Tokenizer, T5Config
+from model.T5_model import infer_answer
+# from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
-    page_title="Rank List Labeler",
-    page_icon='📌',
+    page_title="AIA-GPT 管理平台",
+    page_icon="🦈",
     layout="wide"
 )
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 MODEL_CONFIG = {
-    'model_name': './models/chatgpt-aia-chinese',  # backbone
+    'model_name': './models/ChatYuan-large-v1',  # backbone
     'dataset_file': './datasets/company_datasets/human_rank_pairs.json',  # 标注数据集的存放文件
-    'rank_list_len': 4,  # 排序列表的长度
-    'max_gen_seq_len': 300,  # 生成答案最大长度
-    'random_prompts': [  # 随机prompt池
-    ]
+    'rank_list_len': 3,  # 排序列表的长度
+    'max_gen_seq_len': 512,  # 生成答案最大长度
 }
 
 ######################## 页面配置初始化 ###########################
@@ -45,116 +44,177 @@ RANK_COLOR = [
     'violet'
 ]
 
+# 加载预训练模型：
+# tokenizer = AutoTokenizer.from_pretrained(MODEL_CONFIG['model_name'])
+# model = GPT2LMHeadModel.from_pretrained(MODEL_CONFIG['model_name'])
+# TextGenerationPipeline(model, tokenizer, device=device)
+# model.to(device)
+
+# 加载Company预训练模型
+tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
+config = T5Config.from_pretrained(MODEL_CONFIG['model_name'])
+model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
+model.to(device)
+
 ######################## 会话缓存初始化 ###########################
-if 'model_config' not in st.session_state:
-    st.session_state['model_config'] = MODEL_CONFIG
+print('request & response!')
 
-if 'model' not in st.session_state:
-    model_name = st.session_state['model_config']['model_name']
-    st.session_state['model'] = GPT2LMHeadModel.from_pretrained(model_name)
+if 'prompt' not in st.session_state:
+    st.session_state['prompt'] = ''
 
-if 'tokenizer' not in st.session_state:
-    model_name = st.session_state['model_config']['model_name']
-    st.session_state['tokenizer'] = AutoTokenizer.from_pretrained(model_name)
+if 'query' not in st.session_state:
+    st.session_state['query'] = ''
 
-if 'generator' not in st.session_state:
-    st.session_state['generator'] = TextGenerationPipeline(
-        st.session_state['model'],
-        st.session_state['tokenizer'],
-        device=device
-    )
+if 'answer' not in st.session_state:
+    st.session_state['answer'] = ''
 
-if 'current_results' not in st.session_state:
-    st.session_state['current_results'] = [''] * MODEL_CONFIG['rank_list_len']
+if 'answer_to_rank' not in st.session_state:
+    answer_to_rank = {}
+    st.session_state['answer_to_rank'] = answer_to_rank
 
-if 'current_prompt' not in st.session_state:
-    st.session_state['current_prompt'] = '友童乐齿医疗保险，在保险合同有效期内'
+if 'rank_choices' not in st.session_state:
+    rank_choices = ['-1']
+    for i in range(MODEL_CONFIG['rank_list_len']):
+        rank_choices.append(str(i + 1))
+    st.session_state['rank_choices'] = rank_choices
 
 
 ######################### 函数定义区 ##############################
-def generate_text():
+def generate_text(prompt, do_sample):
     """
     模型生成文字。
     """
-    current_results = []
-    for _ in range(MODEL_CONFIG['rank_list_len']):
-        res = st.session_state['generator'](
-            st.session_state['current_prompt'],
-            max_length=MODEL_CONFIG['max_gen_seq_len'],
-            do_sample=True
-        )
-        current_results.extend([e['generated_text'] for e in res])
-    st.session_state['current_results'] = current_results
+    print(f'prompt: {prompt}')
+    # current_results = []
+    # for _ in range(MODEL_CONFIG['rank_list_len']):
+    #     if st.session_state['current_prompt'] != '':
+    #         res = st.session_state['generator'](
+    #             st.session_state['current_prompt'],
+    #             max_length=MODEL_CONFIG['max_gen_seq_len'],
+    #             do_sample=True,
+    #             early_stopping=True,  # 保证当遇到EOS词时，结束生成
+    #         )
+    #         current_results.extend([e['generated_text'] for e in res])
+    # st.session_state['current_results'] = current_results
+    return_seqs = MODEL_CONFIG['rank_list_len']
+    if do_sample:
+        # 标注模式
+        action = '标注模式'
+        return_seqs = MODEL_CONFIG['rank_list_len']
+    else:
+        # 问答模式
+        action = '问答模式'
+        return_seqs = 1
+    answers = infer_answer(text=prompt,
+                           tokenizer=tokenizer,
+                           model=model,
+                           # do_sample=do_sample,
+                           samples=return_seqs
+                           )
+    print(f'answer in generator: {len(answers)} x {len(answers[0])}')
+    if action == '标注模式':
+        st.session_state['answer_to_rank'] = {}
+        for _, answer in enumerate(answers):
+            st.session_state['answer_to_rank'][answer] = '-1'  # -1 为初始rank，等于未排序
+    elif action == '问答模式':
+        st.session_state['answer'] = answers[0]
 
 
 ######################### 页面定义区（侧边栏） ########################
-st.sidebar.title('📌 Rank List 标注平台')
-st.sidebar.markdown('''
-    ```python
-    用于生成模型生成 Rank List 的标注。
-    ```
-''')
-st.sidebar.markdown('标注思路参考自 [InstructGPT](https://arxiv.org/pdf/2203.02155.pdf) 。')
-st.sidebar.markdown('RLHF 更多介绍：[想训练ChatGPT？得...](https://zhuanlan.zhihu.com/p/595579042)')
-st.sidebar.header('⚙️ Model Config')
-st.sidebar.write('当前标注配置（可在源码中修改）：')
-st.sidebar.write(st.session_state['model_config'])
+with st.sidebar:
+    st.image(Image.open('./images/AIA_logo.png'))
+    st.sidebar.title('📌 AIA-GPT 管理平台')
+    st.sidebar.markdown('''
+        ```python
+        提供生成式提问测试，以及内容的排序标注
+        
+        Label Tab：标注模式。
+            用户输入提示问题，系统输出多个答案。
+            用户根据答案的准确性进行排序。
+            
+        Prompt Tab：问答模式。
+            用户输入提示问题，系统输出唯一答案。
+            
+        ```
+    ''')
 
-label_tab, dataset_tab = st.tabs(['Label', 'Dataset'])
+label_tab, prompt_tab = st.tabs(['Label', 'Prompt'])
+answer_to_rank = []
 
 ######################### 页面定义区（标注页面） ########################
 with label_tab:
-    with st.expander('🔍 Setting Prompts', expanded=True):
-        random_button = st.button('随机 prompt',
-                                  help='从prompt池中随机选择一个prompt，可通过修改源码中 MODEL_CONFIG["random_prompts"] 参数来自定义prompt池。')
-        if random_button:
-            prompt_text = random.choice(MODEL_CONFIG['random_prompts'])
+    with st.expander('AIA-GPT对话问答专区', expanded=True):  # expanded 是展开还是收缩状态
+        label_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='label_query')
+        if label_query_txt != '' and st.session_state['query'] != label_query_txt:
+            st.session_state['query'] = label_query_txt
+            generate_text(st.session_state['query'], do_sample=True)
+
+    with st.expander('GPT的回答如下：', expanded=True):
+        answer_to_rank = st.session_state['answer_to_rank']
+        if len(answer_to_rank) > 0:
+            rank_choices = st.session_state['rank_choices']
+            i = 0
+            for answer, rank in answer_to_rank.items():
+                if rank != '0':
+                    rank_col, answer_col = st.columns([1, 10])
+                    i += 1
+                    curr_choice = int(rank) if rank != '-1' else 0
+                    with rank_col:
+                        st.text("🥇 Choose Rank")
+                        choice = st.selectbox(f'句子{i}排名', rank_choices,
+                                              help='为当前句子选择排名，排名越小，得分越高。（-1代表当前句子暂未设置排名）')
+                        if choice != curr_choice:
+                            st.session_state['answer_to_rank'][answer] = choice
+                            curr_choice = choice
+                    with answer_col:
+                        st.text("💡 Generated Answers")
+                        if curr_choice != '-1':
+                            color = RANK_COLOR[int(curr_choice) - 1]
+                            st.markdown(f":{color}[{answer}]")
+                        else:
+                            color = 'white'
+                            st.markdown(f":{color}[{answer}]")
+                # st.session_state['answer_to_rank'] = answer_to_rank
+
+            # 手工写答案
+            rank_col, answer_col = st.columns([1, 10])
+            rank = MODEL_CONFIG['rank_list_len'] + 1
+            with rank_col:
+                st.text("🥇 Choose Rank")
+                st.text('0')
+            with answer_col:
+                input_answer = st.text_area(label='💡 请输入您的答案：', placeholder='这里手工输入答案')
+                add_button = st.button('＋添加手工答案')
+                if input_answer != '' and add_button:
+                    st.session_state['answer_to_rank'][input_answer] = '0'
+                    st.success('成功添加手工答案，请点击按钮存储当前排序', icon="✅")
+                    # color = RANK_COLOR[0]
+                    # st.markdown(f":{color}[{input_answer}]")
+                # st.session_state['answer_to_rank'] = answer_to_rank
+
         else:
-            prompt_text = st.session_state['current_prompt']
+            rank_col, answer_col = st.columns([1, 10])
+            with rank_col:
+                st.text("🥇 Choose Rank")
+            with answer_col:
+                st.text("💡 Generate Answers")
 
-        query_txt = st.text_input('prompt: ', prompt_text)
-        if query_txt != st.session_state['current_prompt']:
-            st.session_state['current_prompt'] = query_txt
-            generate_text()
-
-    with st.expander('💡 Generate Results', expanded=True):
-        if st.session_state['current_results'][0] == '':
-            generate_text()
-
-        columns = st.columns([1] * MODEL_CONFIG['rank_list_len'])
-        rank_results = [-1] * MODEL_CONFIG['rank_list_len']
-        rank_choices = [-1] + [i + 1 for i in range(MODEL_CONFIG['rank_list_len'])]
-        for i, c in enumerate(columns):
-            with c:
-                choice = st.selectbox(f'句子{i + 1}排名', rank_choices, help='为当前句子选择排名，排名越小，得分越高。（-1代表当前句子暂未设置排名）')
-                if choice != -1 and choice in rank_results:
-                    st.info(f'当前排名[{choice}]已经被句子[{rank_results.index(choice) + 1}]占用，请先将占用排名的句子置为-1再为当前句子分配该排名。')
-                else:
-                    rank_results[i] = choice
-                color = RANK_COLOR[i] if i < len(RANK_COLOR) else 'white'
-                # st.write(color)
-                st.markdown(f":{color}[{st.session_state['current_results'][i]}]")
-
-    with st.expander('🥇 Rank Results', expanded=True):
-        columns = st.columns([1] * MODEL_CONFIG['rank_list_len'])
-        for i, c in enumerate(columns):
-            with c:
-                st.write(f'Rank {i + 1}：')
-                if i + 1 in rank_results:
-                    color = RANK_COLOR[rank_results.index(i + 1)] if rank_results.index(i + 1) < len(
-                        RANK_COLOR) else 'white'
-                    st.markdown(f":{color}[{st.session_state['current_results'][rank_results.index(i + 1)]}]")
+    answer_to_rank_new = st.session_state['answer_to_rank']
+    print(f'answer_to_rank: {answer_to_rank_new}')
 
     save_button = st.button('存储当前排序')
     if save_button:
-        dataset_file_name = MODEL_CONFIG['dataset_file'].split('/')[-1]
-        dataset_file_path = MODEL_CONFIG['dataset_file'].replace(dataset_file_name, '')
-        if not os.path.exists(dataset_file_path):
-            os.makedirs(dataset_file_path)
-
-        if -1 in rank_results:
-            st.error('请完成排序后再存储！', icon='🚨')
-            st.stop()
+        answer_to_rank = st.session_state['answer_to_rank']
+        rank_list = []
+        for ans, rank in answer_to_rank.items():
+            if rank == '-1':
+                st.error('请完成排序后再存储！', icon='🚨')  # 所有标注都已排序，才能保存
+                st.stop()
+            if rank in rank_list:
+                st.error('序号选择重复！', icon='🚨')  # 序号选择重复
+                st.stop()
+            else:
+                rank_list.append(rank)
 
         # with open(MODEL_CONFIG['dataset_file'], 'a', encoding='utf8') as f:
         #     rank_texts = []
@@ -162,36 +222,49 @@ with label_tab:
         #         rank_texts.append(st.session_state['current_results'][rank_results.index(i + 1)])
         #     line = '\t'.join(rank_texts)
         #     f.write(f'{line}\n')
-
-        file = open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8')
+        file = open(MODEL_CONFIG['dataset_file'], 'r+', encoding='utf8')
+        print(f'file information: {file}')
         content = file.read()
+        print(f'orignal file content: {content}')
+        file.seek(0)
+        file.truncate()
         if len(content) != 0 and content != '':
             rank_pairs = json.loads(content)
         else:
             rank_pairs = {}
-        rank_pairs[len(rank_pairs)]['prompt'] = st.session_state['current_prompt']
-        ranked_answers = []
-        for i in range(len(rank_results)):
-            ranked_answers.append(st.session_state['current_results'][rank_results.index(i + 1)])
-        rank_pairs[len(rank_pairs)]['ranked_answers'] = ranked_answers
+        length = len(rank_pairs)
+        print(f'orignal json length: {length}')
+        rank_pairs[length] = {}
+        rank_pairs[length]['prompt'] = st.session_state['prompt'].strip()
+        ranking = {}
+        for ans, rank in answer_to_rank.items():
+            ranking[rank] = ans
+        ranked_answers = [ranking[key] for key in sorted(ranking.keys())]
+        rank_pairs[length]['ranked_answers'] = ranked_answers
         # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
-        # rank_pairs = json.dumps(rank_pairs)
-        json.dump(rank_pairs, file)
-
+        content = json.dumps(rank_pairs, ensure_ascii=False, indent=2)
+        print(f'file save content {content}')
+        # json.dump(content, file, ensure_ascii=False, indent=2)
+        file.write(content)
+        file.flush()
         st.success('保存成功，请更换prompt生成新的答案~', icon="✅")
+        st.session_state.clear()
+        # label_tab.empty()
+        # st._rerun()
+        # st_autorefresh(interval=2000, limit=100, key="fizzbuzzcounter")
 
-######################### 页面定义区（数据集页面） #######################
-with dataset_tab:
-    rank_texts_list = []
-    with open(MODEL_CONFIG['dataset_file'], 'w+', encoding='utf8') as f:
-        for i, line in enumerate(f.readlines()):
-            texts = line.strip().split('\t')
-            if len(texts) != MODEL_CONFIG['rank_list_len']:
-                st.warning(f"error line {i+1}: expeted {MODEL_CONFIG['rank_list_len']} sentence, got {len(texts)}, skipped.")
-                continue
-            rank_texts_list.append(texts)
-    df = pd.DataFrame(
-        np.array(rank_texts_list),
-        columns=([f'rank {i+1}' for i in range(MODEL_CONFIG['rank_list_len'])])
-    )
-    st.dataframe(df)
+######################### 页面定义区（问答页面） ########################
+with prompt_tab:
+    with st.expander('AIA-GPT对话问答专区', expanded=True):  # expanded 是展开还是收缩状态
+        qa_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='qa_query')
+        if qa_query_txt != '' and st.session_state['prompt'] != qa_query_txt:
+            st.session_state['prompt'] = qa_query_txt
+            generate_text(st.session_state['prompt'], do_sample=False)
+
+    with st.expander('GPT的回答如下：', expanded=True):
+        if 'answer' in st.session_state:
+            answer = st.session_state['answer']
+            st.text("💡 Generated Answers")
+            if answer != '':
+                color = RANK_COLOR[0]
+                st.markdown(f":{color}[{answer}]")

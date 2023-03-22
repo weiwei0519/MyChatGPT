@@ -18,7 +18,8 @@ from rich import print
 from tqdm import tqdm
 import numpy as np
 from transformers import AutoTokenizer
-from model.GPT2_model import GPT2HeadWithValueModel
+# from model.GPT2_model import GPT2HeadWithValueModel
+from model.T5_model import T5ModelWithValueModel
 from model.ppo_model import PPOModel
 from utils.training_logger import LoggerWriter
 import json
@@ -30,6 +31,8 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 # GPT基础语言模型
 gpt2_model_dir = '../models/chatgpt-aia-chinese/gpt-aia-chinese'
+# ChatGPT基础语言模型
+ttt_model_dir = '../models/chatgpt-aia-chinese/ttt-aia-chinese'
 # 奖惩模型
 reward_model_dir = '../models/chatgpt-aia-chinese/rm-aia-chinese'
 # PPO模型输出路径
@@ -39,7 +42,8 @@ chatgpt_model_dir = '../models/chatgpt-aia-chinese'
 
 # model config
 config = {
-    "model_name": gpt2_model_dir,
+    # "model_name": gpt2_model_dir,
+    "model_name": ttt_model_dir,
     "steps": 5000,
     "batch_size": 8,
     "forward_batch_size": 8,
@@ -62,10 +66,10 @@ config = {
 
 # prompt池
 prompts = [
-    '刚收到货，感觉',
-    '这部电影很',
-    '说实话，真的很',
-    '这次购物总的来说体验很'
+    '我需要准备多少准客户名单？',
+    '客户为什么要分类？ABC三类有什么区别？',
+    '怎么判断我认识的人哪些是准客户哪些不是？',
+    '我是新人，不知道怎么找到客户，有什么好办法吗？'
 ]
 
 # 加载奖惩模型
@@ -74,24 +78,30 @@ reward_model = torch.load(os.path.join(reward_model_dir, 'model.pt'))
 reward_model.to(device)
 # sentiment_pipe = pipeline('sentiment-analysis', model=reward_model, tokenizer=reward_tokenizer, device=pipe_device)
 
-# 加载GPT2文本生成模型
-gpt2_model = GPT2HeadWithValueModel.from_pretrained(config['model_name'])
-gpt2_model_ref = GPT2HeadWithValueModel.from_pretrained(config['model_name'])
-gpt2_tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
-gpt2_tokenizer.eos_token = gpt2_tokenizer.pad_token
-gpt2_model.to(device)
-gpt2_model_ref.to(device)
+# 加载TTT文本生成对话模型
+model = T5ModelWithValueModel.from_pretrained(config['model_name'])
+model_ref = T5ModelWithValueModel.from_pretrained(config['model_name'])
+tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+tokenizer.eos_token = tokenizer.pad_token
+model.to(device)
+model_ref.to(device)
+# gpt2_model = GPT2HeadWithValueModel.from_pretrained(config['model_name'])
+# gpt2_model_ref = GPT2HeadWithValueModel.from_pretrained(config['model_name'])
+# gpt2_tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+# gpt2_tokenizer.eos_token = gpt2_tokenizer.pad_token
+# gpt2_model.to(device)
+# gpt2_model_ref.to(device)
 
 gen_kwargs = {
     "min_length": -1,
     "top_k": 0.0,
     "top_p": 1.0,
     "do_sample": True,
-    "pad_token_id": gpt2_tokenizer.eos_token_id
+    "pad_token_id": tokenizer.eos_token_id
 }
 
 # RL Trainer
-ppo_model_trainer = PPOModel(gpt2_model, gpt2_model_ref, gpt2_tokenizer, **config)
+ppo_model_trainer = PPOModel(model, model_ref, tokenizer, **config)
 total_ppo_epochs = int(np.ceil(config["steps"] / config['batch_size']))
 
 # 加载Prompt + Ranked Answer数据集，基于人工排序所动态生成的:prompt-ranked answer。
@@ -118,25 +128,25 @@ for epoch in tqdm(range(total_ppo_epochs)):
     for _ in range(int(config['batch_size'] / config['sample_count'])):
         random_no = random.choice(list(reward_pairs.keys()))  # 随机选择一个prompt
         prompt = reward_pairs[random_no]["prompt"]
-        prompt_encoding = gpt2_tokenizer(text=[prompt],
-                                         truncation=True,
-                                         pad_to_max_length=True,
-                                         padding='max_length',
-                                         max_length=config['prompt_len'],
-                                         return_tensors="pt"
-                                         )
+        prompt_encoding = tokenizer(text=[prompt],
+                                    truncation=True,
+                                    pad_to_max_length=True,
+                                    padding='max_length',
+                                    max_length=config['prompt_len'],
+                                    return_tensors="pt"
+                                    )
         ranked_answers = reward_pairs[random_no]["ranked_answers"]
         for answer in ranked_answers:
             batch['prompt'].append(prompt)
             batch['prompt_encoding'].append(prompt_encoding)
             batch['answer'].append(answer)
-            answer_encoding = gpt2_tokenizer(text=[answer],
-                                             truncation=True,
-                                             pad_to_max_length=True,
-                                             padding='max_length',
-                                             max_length=config['gen_len'],
-                                             return_tensors="pt"
-                                             )
+            answer_encoding = tokenizer(text=[answer],
+                                        truncation=True,
+                                        pad_to_max_length=True,
+                                        padding='max_length',
+                                        max_length=config['gen_len'],
+                                        return_tensors="pt"
+                                        )
             batch['answer_encoding'].append(answer_encoding)
     prompt_tensors = [torch.squeeze(t['input_ids']).long().to(device) for t in batch["prompt_encoding"]]
     answer_tensors = [torch.squeeze(t['input_ids']).long().to(device) for t in batch["answer_encoding"]]
@@ -166,15 +176,6 @@ for epoch in tqdm(range(total_ppo_epochs)):
         torch.cuda.empty_cache()
     rewards_tensor = torch.tensor(rewards).float().to(device)
     timing['time/reward'] = time.time() - t1
-    # for output in pipe_outputs:
-    #     if output['label'] == 'positive (stars 4 and 5)':
-    #         rewards.append(output['score'])
-    #     elif output['label'] == 'negative (stars 1, 2 and 3)':
-    #         rewards.append(1 - output['score'])
-    #     else:
-    #         raise ValueError(f"错误的推理结果{output['label']}.")
-    # rewards = torch.tensor(rewards).to(device)  # 将正向情感的得分作为生成得分
-    # timing['time/get_sentiment_preds'] = time.time() - t
 
     t2 = time.time()
     stats = ppo_model_trainer.step(prompt_tensors, answer_tensors, rewards_tensor)  # PPO Update

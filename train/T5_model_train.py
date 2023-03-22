@@ -21,11 +21,19 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from utils.gpu_track import MemTracker
 import inspect
 import logging
+import gc
 
 # rich: for a better display on terminal
 from rich.table import Column, Table
 from rich import box
 from rich.console import Console
+
+# 无需修改模型代码，只要在训练代码中加入如下几行代码，就可以训练显卡容量的 3~4 倍大小的模型。
+import megengine as mge
+
+mge.dtr.eviction_threshold = "10GB"  # 设置显存阈值
+mge.dtr.enable()
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
 # 做一些相关的配置(打印显示；GPU设置)
 # define a rich console logger
@@ -127,10 +135,15 @@ def compute_metrics(pred):
     }
 
 
+def callback_func():
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def model_train(
-        tokenizer, model, dataset, batch_size, epochs, learning_rate, device,
-        model_dir="./models/chatgpt-aia-chinese/ttt-aia-chinese",
-        log_dir='./logs/TTT-train/',
+        tokenizer, model, dataset, batch_size, epochs, learning_rate, device, action,
+        model_dir="../models/chatgpt-aia-chinese/ttt-aia-chinese",
+        log_dir='../logs/TTT-train/',
         datasets_dir='./datasets/company_datasets/',
 ):
     # 参数参考这篇文章：https://zhuanlan.zhihu.com/p/363670628
@@ -138,7 +151,7 @@ def model_train(
         output_dir=model_dir,  # output directory 结果输出地址
         num_train_epochs=epochs,  # total # of training epochs 训练总批次
         per_device_train_batch_size=batch_size,  # batch size per device during training 训练批大小
-        per_device_eval_batch_size=batch_size,  # batch size for evaluation 评估批大小
+        per_device_eval_batch_size=1,  # batch size for evaluation 评估批大小
         evaluation_strategy="steps",  # Evaluation is done at the end of each epoch. or 10 steps
         logging_dir=log_dir,  # directory for storing logs 日志存储位置
         logging_strategy='epoch',
@@ -148,6 +161,8 @@ def model_train(
         overwrite_output_dir=True,  # 覆盖之前写的模型输出文件
         prediction_loss_only=True,  # 只计算loss不计算evaluation
         gradient_accumulation_steps=256 / batch_size,
+        # fp16=True,  # 采用混合精度fp16
+        no_cuda=True,
         # 显存重计算是典型的用时间换空间，比如我们希望跑256的大点的batch，不希望跑32这样的小batch，
         # 因为觉得小batch不稳定，会影响模型效果，但是gpu显存又无法放下256的batchsize的数据，
         # 此时我们就可以进行显存重计算，将这个参数设置为256/32=8即可。
@@ -188,12 +203,16 @@ def model_train(
         eval_dataset=dataset,  # evaluation dataset 测试集
         optimizers=(optimizer, lr_scheduler),  # 自定义优化器
         data_collator=data_collator,  # 使用动态padding，节省训练内存占用
-        compute_metrics=compute_metrics  # 计算指标方法
+        compute_metrics=compute_metrics,  # 计算指标方法
+        callbacks=callback_func()  # 每轮清空缓存
     )
 
-    # print(torch.cuda.memory_summary())
-
-    trainer.train()
+    if action == 'checkpoint':
+        # 从checkpoint断点继续训练
+        trainer.train(resume_from_checkpoint=True)
+    else:
+        # 从头训练
+        trainer.train()
 
 
 # to display dataframe in ASCII format
