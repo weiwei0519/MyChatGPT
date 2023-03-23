@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 # device : GPU or CPU
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +50,8 @@ epochs = 10000
 learning_rate = 1e-5  # 学习率
 max_length = 512
 prompt_length = 50
-action = 'validate'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
-pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
+action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
+pretrained_model_dir = "../models/OpenAI-GPT2-XLarge/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
 
 # the eos and bos tokens are defined
@@ -114,9 +114,9 @@ def train():
         # the pre-trained model is loaded with the custom configuration
         # model = GPT2LMHeadModel(config)
         model = GPT2LMHeadModel.from_pretrained(pretrained_model_dir, config=config)
-        num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+        # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         # the model embedding is resized
-        model.resize_token_embeddings(len(tokenizer))
+        # model.resize_token_embeddings(len(tokenizer))
         model.to(device)
 
     model_size = sum(t.numel() for t in model.parameters())
@@ -143,19 +143,29 @@ def train():
     # 对于超出content_length限制的文本，需要进行拆分处理。
     for text in paraphs:
         text = "".join(text.split())  # 去掉空格
-        length = len(text) + 2  # 需要加上bos和eos的长度
-        if length <= max_length:
-            texts.append(cls + text + eos + pad * (max_length - length))
+        if len(text) <= max_length:
+            texts.append(text)
         else:
             r = 0
-            for i in range(length // max_length):
-                if i == 0:
-                    texts.append(cls + text[0:max_length - 1])
-                else:
-                    texts.append(text[i * max_length - 1:(i + 1) * max_length - 1])
-                r = i
-            texts.append(text[(r + 1) * max_length - 1:-1] + eos + pad * (
-                    max_length - 1 - len(text[(r + 1) * max_length - 1:-1])))
+            for i in range(len(text) // max_length):
+                texts.append(text[i:(i + 1) * max_length])
+                r += 1
+            texts.append(text[r * max_length:len(text)])
+    # for text in paraphs:
+    #     text = "".join(text.split())  # 去掉空格
+    #     length = len(text) + 2  # 需要加上bos和eos的长度
+    #     if length <= max_length:
+    #         texts.append(cls + text + eos + pad * (max_length - length))
+    #     else:
+    #         r = 0
+    #         for i in range(length // max_length):
+    #             if i == 0:
+    #                 texts.append(cls + text[0:max_length - 1])
+    #             else:
+    #                 texts.append(text[i * max_length - 1:(i + 1) * max_length - 1])
+    #             r = i
+    #         texts.append(text[(r + 1) * max_length - 1:-1] + eos + pad * (
+    #                 max_length - 1 - len(text[(r + 1) * max_length - 1:-1])))
     del paraphs
     # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,

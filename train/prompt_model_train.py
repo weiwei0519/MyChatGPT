@@ -39,7 +39,7 @@ console = Console(record=True)
 
 # 定义模型的参数 let's define model parameters specific to T5 (Text-To-Text Transfer Transformer)
 model_params = {
-    "MODEL": "./models/ClueAI/PromptCLUE-base",  # model_type
+    "MODEL": "../models/ClueAI/PromptCLUE-base",  # model_type
     "TRAIN_BATCH_SIZE": 8,  # training batch size, 8
     "VALID_BATCH_SIZE": 8,  # validation batch size,8
     "TRAIN_EPOCHS": 10,  # number of training epochs
@@ -341,5 +341,5 @@ if __name__ == '__main__':
         source_text="input",
         target_text="target",
         model_params=model_params,
-        output_dir="./models/CompanyModel0.1-Prompt-Chinese",
+        output_dir="../models/CompanyModel0.1-Prompt-Chinese",
     )

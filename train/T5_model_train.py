@@ -161,8 +161,8 @@ def model_train(
         overwrite_output_dir=True,  # 覆盖之前写的模型输出文件
         prediction_loss_only=True,  # 只计算loss不计算evaluation
         gradient_accumulation_steps=256 / batch_size,
-        # fp16=True,  # 采用混合精度fp16
-        no_cuda=True,
+        fp16=True,  # 采用混合精度fp16
+        # no_cuda=True,
         # 显存重计算是典型的用时间换空间，比如我们希望跑256的大点的batch，不希望跑32这样的小batch，
         # 因为觉得小batch不稳定，会影响模型效果，但是gpu显存又无法放下256的batchsize的数据，
         # 此时我们就可以进行显存重计算，将这个参数设置为256/32=8即可。

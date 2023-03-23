@@ -29,6 +29,7 @@ from utils.gpu_track import MemTracker
 import inspect
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import docx2txt
 
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -41,11 +42,11 @@ frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 128
+batch_size = 16
 epochs = 2000
 learning_rate = 1e-5  # 学习率
 context_length = 512
-action = 'checkpoint'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
+action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
 pretrained_model_dir = "../models/ChatYuan-large-v1/"
 model_output_dir = "../models/chatgpt-aia-chinese/ttt-aia-chinese"
 
@@ -226,7 +227,6 @@ def train():
     else:
         # 初始化预训练模型
         tokenizer = T5Tokenizer.from_pretrained(pretrained_model_dir)
-        tokenizer.to(device)
         config = T5Config.from_pretrained(pretrained_model_dir)
         model = T5ForConditionalGeneration(config)
         model.to(device)
@@ -235,23 +235,63 @@ def train():
     # gpu_tracker.track()
 
     # 数据集
-    file = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
-    content = pd.read_excel(file)
-    print(content.head(5))
-    text_pairs = content.iloc[:, [0, 1]]
-    # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-    # texts_pairs = [[w for w in l.split('>>>')] for l in lines]
-    # source_texts, target_texts = zip(*texts_pairs)
-    source_texts = content.iloc[:, 0].values.tolist()
-    target_texts = content.iloc[:, 1].values.tolist()
-    src_max_len = max([len(text) for text in source_texts])
-    tgt_max_len = max([len(text) for text in target_texts])
-    train_set = InputOutputDataset(tokenizer=tokenizer,
-                                   source_texts=source_texts,
-                                   target_texts=target_texts,
-                                   source_len=src_max_len,
-                                   target_len=tgt_max_len,
-                                   )
+    if action == 'train':
+        window = 1  # 该参数为定义需要最多包含window个数的输入句子。
+        doc_path = '../datasets/company_datasets/aiacn/'
+        files = os.listdir(doc_path)
+        paraphs = []
+        for file in files:
+            paraphs.extend(
+                docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+        # print(paraphs)
+        sentences = []
+        for paraph in paraphs:
+            if len(paraph) < 10 and (not paraph.endswith('。')) and (not paraph.endswith('？')):
+                continue
+            paraph = paraph.replace("。", "。[SEP]")
+            paraph = paraph.replace("？", "？[SEP]")
+            if paraph.endswith('[SEP]'):
+                paraph = paraph[:-5]
+            for sentence in paraph.split('[SEP]'):
+                if len(sentence) > 1:
+                    sentences.append(sentence)
+        # print(sentences)
+        source_texts = []
+        target_texts = []
+        source = []
+        target = []
+        for w in range(1, window + 1):
+            for i in range(len(sentences) - 1):
+                source = "".join(sentences[i:i + w])
+                target = "".join(sentences[i + w:i + w + 1])
+                source_texts.append(source)
+                target_texts.append(target)
+        src_max_len = max([len(text) for text in source_texts])
+        tgt_max_len = max([len(text) for text in target_texts])
+        train_set = InputOutputDataset(tokenizer=tokenizer,
+                                       source_texts=source_texts,
+                                       target_texts=target_texts,
+                                       source_len=src_max_len,
+                                       target_len=tgt_max_len,
+                                           )
+    elif action == 'fine-tuning':
+        file = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
+        content = pd.read_excel(file)
+        print(content.head(5))
+        text_pairs = content.iloc[:, [0, 1]]
+        # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
+        # texts_pairs = [[w for w in l.split('>>>')] for l in lines]
+        # source_texts, target_texts = zip(*texts_pairs)
+        source_texts = content.iloc[:, 0].values.tolist()
+        target_texts = content.iloc[:, 1].values.tolist()
+        src_max_len = max([len(text) for text in source_texts])
+        tgt_max_len = max([len(text) for text in target_texts])
+        train_set = InputOutputDataset(tokenizer=tokenizer,
+                                       source_texts=source_texts,
+                                       target_texts=target_texts,
+                                       source_len=src_max_len,
+                                       target_len=tgt_max_len,
+                                       )
     print('dataset''s shape = {0}, {1}'.format(train_set.source_shape, train_set.target_shape))
 
     # 开始模型训练
