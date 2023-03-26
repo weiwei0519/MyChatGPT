@@ -66,7 +66,7 @@ if 'query' not in st.session_state:
     st.session_state['query'] = ''
 
 if 'answer' not in st.session_state:
-    st.session_state['answer'] = ''
+    st.session_state['answer'] = '我是人工智能助手，通过自然语言处理技术与用户互动。我的目标是为您提供帮助，回答问题，解决问题或提供建议。从一般性话题到专业知识，我可以提供各种领域的信息和建议。请随时向我提问，我会尽可能地帮助您！'
 
 if 'answer_to_rank' not in st.session_state:
     answer_to_rank = {}

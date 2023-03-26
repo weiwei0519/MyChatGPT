@@ -93,7 +93,7 @@ def evaluate_model(model, data_loader):
                     )
                     rank_rewards.append(reward[0])  # (rank_text_num)
                 batch_rank_rewards.append(rank_rewards)  # (batch, rank_text_num)
-    model.train()
+    model.model_train()
     total_ranklist, right_ranklist = 0, 0
     for rank_rewards in batch_rank_rewards:
         rank_rewards = [t.cpu().float() for t in rank_rewards]

@@ -51,7 +51,7 @@ learning_rate = 1e-5  # 学习率
 max_length = 512
 prompt_length = 50
 action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
-pretrained_model_dir = "../models/OpenAI-GPT2-XLarge/"
+pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
 
 # the eos and bos tokens are defined
@@ -101,19 +101,13 @@ def train():
         model = GPT2LMHeadModel.from_pretrained(model_output_dir)
     else:
         # 初始化空模型
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
-        # tokenizer.padding_side = 'right'
+        tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
         config = AutoConfig.from_pretrained(
-            pretrained_model_name_or_path=pretrained_model_dir,
-            vocab_size=len(tokenizer),
-            n_ctx=max_length,
-            bos_token_id=tokenizer.bos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
+            pretrained_model_name_or_path=model_output_dir,
         )
         # the pre-trained model is loaded with the custom configuration
-        # model = GPT2LMHeadModel(config)
-        model = GPT2LMHeadModel.from_pretrained(pretrained_model_dir, config=config)
+        model = GPT2LMHeadModel(config)
+        # model = GPT2LMHeadModel.from_pretrained(model_output_dir, config=config)
         # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         # the model embedding is resized
         # model.resize_token_embeddings(len(tokenizer))
@@ -130,7 +124,8 @@ def train():
         doc_path = '../datasets/company_datasets/aiacn/'
         files = os.listdir(doc_path)
         for file in files:
-            paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+            # paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+            paraphs.append(docx2txt.process(doc_path + file))
     elif action == 'fine-tuning':
         doc_path = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
         content = pd.read_excel(doc_path)
@@ -180,7 +175,7 @@ def train():
 
     # 开始模型训练
     pre = time.time()
-    model.train()
+    model.model_train()
 
     model_train(
         tokenizer=tokenizer,

@@ -120,7 +120,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
     Function to be called for training with the parameters passed from main function
 
     """
-    model.train()
+    model.model_train()
     time1 = time.time()
     for _, data in tqdm(enumerate(loader, 0)):
         y = data["target_ids"].to(device, dtype=torch.long)

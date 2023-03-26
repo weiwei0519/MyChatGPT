@@ -171,6 +171,19 @@ class GeneDataset(Dataset):
         return val_dataset
 
 
+class GPT2Dataset(Dataset):
+    def __init__(self, data_list, tokenizer):
+        self.data_list = data_list
+        self.tokenizer = tokenizer
+
+    def __getitem__(self, index):
+        input_ids = self.data_list[index]
+        return input_ids
+
+    def __len__(self):
+        return len(self.data_list)
+
+
 class TextClassifyDataset(Dataset):
     def __init__(self, tokenizer, texts, labels, max_len):
         self.tokenizer = tokenizer

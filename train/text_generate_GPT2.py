@@ -108,7 +108,7 @@ train_loader = DataLoader(dataset=train_set,
 pre = time.time()
 
 model.to(device)
-model.train()
+model.model_train()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)  # 定义优化器
 
 for i in range(epochs):
