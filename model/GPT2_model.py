@@ -45,21 +45,14 @@ frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 4
+batch_size = 2
 epochs = 10000
 learning_rate = 1e-5  # 学习率
-max_length = 512
-prompt_length = 50
+text_length = 500
+context_length = 1024
 action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
 pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
-
-# the eos and bos tokens are defined
-bos = '[endoftext]'
-cls = '[CLS]'
-eos = '[EOS]'
-pad = '[pad]'
-special_tokens_dict = {'eos_token': eos, 'bos_token': bos, 'pad_token': pad, 'cls_token': cls}
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
@@ -102,6 +95,8 @@ def train():
     else:
         # 初始化空模型
         tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
         config = AutoConfig.from_pretrained(
             pretrained_model_name_or_path=model_output_dir,
         )
@@ -137,15 +132,15 @@ def train():
 
     # 对于超出content_length限制的文本，需要进行拆分处理。
     for text in paraphs:
-        text = "".join(text.split())  # 去掉空格
-        if len(text) <= max_length:
+        # text = "".join(text.split())  # 去掉空格
+        if len(text) <= text_length:
             texts.append(text)
         else:
             r = 0
-            for i in range(len(text) // max_length):
-                texts.append(text[i:(i + 1) * max_length])
+            for i in range(len(text) // text_length):
+                texts.append(text[i * text_length:(i + 1) * text_length])
                 r += 1
-            texts.append(text[r * max_length:len(text)])
+            texts.append(text[r * text_length:len(text)])
     # for text in paraphs:
     #     text = "".join(text.split())  # 去掉空格
     #     length = len(text) + 2  # 需要加上bos和eos的长度
@@ -165,17 +160,17 @@ def train():
     # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,
                             texts=texts,
-                            length=max_length
+                            length=context_length
                             )
     eval_set = GeneDataset(tokenizer=tokenizer,
-                           texts=sample(texts, int(0.1 * len(text))),
-                           length=max_length
+                           texts=sample(texts, int(0.1 * len(texts))),
+                           length=context_length
                            )
     print('dataset''s shape = {0}'.format(train_set.shape))
 
     # 开始模型训练
     pre = time.time()
-    model.model_train()
+    model.train()
 
     model_train(
         tokenizer=tokenizer,
@@ -202,7 +197,7 @@ def infer_answer(input_text, tokenizer, model, do_sample, return_seqs=1):
     text = preprocess(input_text)
     input_ids = tokenizer.encode(text, return_tensors='pt').to(device)
     generated_text_samples = model.generate(input_ids,
-                                            max_length=max_length,
+                                            max_length=text_length,
                                             num_beams=return_seqs,
                                             no_repeat_ngram_size=2,
                                             do_sample=do_sample,

@@ -140,14 +140,14 @@ class GeneDataset(Dataset):
         text = preprocess(str(self.texts[index]))
 
         # cleaning data so as to ensure data is in string type
-        text = " ".join(text.split())
+        # text = "".join(text.split())
 
         text_encoder = self.tokenizer.batch_encode_plus(
             [text],
             max_length=self.max_len,
             # pad_to_max_length=True,
-            # truncation=True,
-            # padding="max_length",
+            truncation=True,
+            padding="max_length",
             return_tensors="pt",
         )
         # text_encoder = self.tokenizer.batch_encode_plus(

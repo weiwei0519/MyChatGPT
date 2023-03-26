@@ -133,14 +133,14 @@ def data_loader(args, doc_path, tokenizer, shuffle):
             doc_content = docx2txt.process(doc_path + file)
             # doc_content = "".join(doc_content.split())   # 去掉空格
             # 对于超出content_length限制的文本，需要进行拆分处理。
-            if len(doc_content) <= args.max_length:
+            if len(doc_content) <= args.text_length:
                 texts.append(doc_content)
             else:
                 r = 0
-                for i in range(len(doc_content) // args.max_length):
-                    texts.append(doc_content[i * args.max_length:(i + 1) * args.max_length])
+                for i in range(len(doc_content) // args.text_length):
+                    texts.append(doc_content[i * args.text_length:(i + 1) * args.text_length])
                     r += 1
-                texts.append(doc_content[r * args.max_length:len(doc_content)])
+                texts.append(doc_content[r * args.text_length:len(doc_content)])
         input_ids = []
         for text in tqdm(texts):
             input_id = tokenizer.encode(text)
