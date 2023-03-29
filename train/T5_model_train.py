@@ -9,10 +9,13 @@
 # Describe: 
 """
 
+import sys
+sys.path.append("../")
+
 import torch
-from torch.utils.data import DataLoader, Dataset
 import os
 import time
+import datetime
 import numpy as np
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup, DataCollatorWithPadding
@@ -29,16 +32,22 @@ from rich import box
 from rich.console import Console
 
 # 无需修改模型代码，只要在训练代码中加入如下几行代码，就可以训练显卡容量的 3~4 倍大小的模型。
-import megengine as mge
+# import megengine as mge
 
-mge.dtr.eviction_threshold = "10GB"  # 设置显存阈值
-mge.dtr.enable()
+# mge.dtr.eviction_threshold = "10GB"  # 设置显存阈值
+# mge.dtr.enable()
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
 # 做一些相关的配置(打印显示；GPU设置)
 # define a rich console logger
 console = Console(record=True)
-logging.basicConfig(level=logging.INFO)
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/T5/T5_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 
 def train(epoch, tokenizer, model, device, loader, optimizer):
@@ -69,7 +78,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
         # 每100步打印日志
         if _ % 1 == 0 and _ != 0:
             time2 = time.time()
-            print(_, "epoch:" + str(epoch) + "-loss:" + str(loss) + ";each step's time spent:" + str(
+            logging.info(_, "epoch:" + str(epoch) + "-loss:" + str(loss) + ";each step's time spent:" + str(
                 float(time2 - time1) / float(_ + 0.0001)))
             # training_logger.add_row(str(epoch), str(_), str(loss))
 
@@ -161,8 +170,8 @@ def model_train(
         overwrite_output_dir=True,  # 覆盖之前写的模型输出文件
         prediction_loss_only=True,  # 只计算loss不计算evaluation
         gradient_accumulation_steps=256 / batch_size,
-        # fp16=True,  # 采用混合精度fp16
-        no_cuda=True,
+        fp16=True,  # 采用混合精度fp16
+        # no_cuda=True,
         # 显存重计算是典型的用时间换空间，比如我们希望跑256的大点的batch，不希望跑32这样的小batch，
         # 因为觉得小batch不稳定，会影响模型效果，但是gpu显存又无法放下256的batchsize的数据，
         # 此时我们就可以进行显存重计算，将这个参数设置为256/32=8即可。

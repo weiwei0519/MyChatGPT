@@ -10,7 +10,7 @@
 # Describe:
 """
 import os
-import time
+import time, datetime
 import argparse
 import logging
 import json
@@ -57,8 +57,14 @@ parser.add_argument("--img_log_name", default='reward_model.log', type=str, help
 args = parser.parse_args()
 
 logger_writer = LoggerWriter(log_path=args.img_log_dir, log_name=args.img_log_name)
-logging.basicConfig(level=logging.INFO)
-
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/reward_model/reward_model_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
+logging.info(device)
 
 def compute_metrics(pred):
     labels = pred.label_ids
@@ -110,7 +116,7 @@ def train():
     model = RewardModel(encoder=encoder, config=config)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model_size = sum(t.numel() for t in model.parameters())
-    print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
+    logging.info(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     encoder.to(device)
     model.to(device)
     # dataset = load_dataset('text', data_files={'train': args.train_path,

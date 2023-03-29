@@ -10,7 +10,7 @@
 '''
 from pathlib import Path
 import logging
-import time
+import time, datetime
 from random import sample
 from transformers import BertConfig
 from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
@@ -33,7 +33,13 @@ sample_rate = 0.01  # 样本抽样率，节省训练时间。
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-logging.basicConfig(level=logging.INFO)
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/classify/classify_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 
 def read_imdb_split(split_dir):
@@ -49,9 +55,9 @@ def read_imdb_split(split_dir):
 
 train_texts, train_labels = read_imdb_split(Imdb_path + 'train')
 test_texts, test_labels = read_imdb_split(Imdb_path + 'test')
-print('load imdb data finished!')
-print('train_texts shape = {0} before sampling'.format(len(train_texts)))
-print('test_texts shape = {0} before sampling'.format(len(test_texts)))
+logging.info('load imdb data finished!')
+logging.info('train_texts shape = {0} before sampling'.format(len(train_texts)))
+logging.info('test_texts shape = {0} before sampling'.format(len(test_texts)))
 sample_idx = sample([ids for ids in range(len(train_texts))], int(round(len(train_texts) * sample_rate, 0)))
 train_texts = [train_texts[idx] for idx in sample_idx]
 train_labels = [train_labels[idx] for idx in sample_idx]
@@ -60,17 +66,17 @@ test_texts = [test_texts[idx] for idx in sample_idx]
 test_labels = [test_labels[idx] for idx in sample_idx]
 train_max_len = max([len(s) for s in train_texts])
 test_max_len = max([len(s) for s in test_texts])
-print('train_texts shape = {0} after sampling'.format(len(train_texts)))
-print('test_texts shape = {0} after sampling'.format(len(test_texts)))
+logging.info('train_texts shape = {0} after sampling'.format(len(train_texts)))
+logging.info('test_texts shape = {0} after sampling'.format(len(test_texts)))
 
 #  进行分词，转为一串 id，定义分词器，并构造数据集
-print("Tokenizing train, validate, test text ")
+logging.info("Tokenizing train, validate, test text ")
 tokenizer = DistilBertTokenizerFast.from_pretrained(pretrained_model_dir)
 config = BertConfig.from_pretrained(pretrained_model_dir)
 # train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=context_length)
 # test_encodings = tokenizer(test_texts, truncation=True, padding=True, max_length=context_length)
 
-print("create test classify Datasets ")
+logging.info("create test classify Datasets ")
 train_dataset = TextClassifyDataset(tokenizer=tokenizer,
                                     texts=train_texts,
                                     labels=train_labels,
@@ -85,11 +91,11 @@ test_dataset = TextClassifyDataset(tokenizer=tokenizer,
 del train_texts, train_labels, test_texts, test_labels
 
 # 定义一个用于预测得分的模型，以及优化器：
-print("Loading blank bert model ")
+logging.info("Loading blank bert model ")
 model = DistilBertForSequenceClassification(config)
 model.to(device)
 model_size = sum(t.numel() for t in model.parameters())
-print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
+logging.info(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
 model.train()
 optimizer = AdamW(model.parameters(), lr=learning_rate)
 
@@ -97,7 +103,7 @@ optimizer = AdamW(model.parameters(), lr=learning_rate)
 pre = time.time()
 current = time.strftime("%Y-%m-%d %H:%M:%S")
 model.train()
-print('reward model training start on {0}'.format(current))
+logging.info('reward model training start on {0}'.format(current))
 model_train(
     tokenizer=tokenizer,
     model=model,
@@ -119,4 +125,4 @@ model_train(
 #         loss = outputs[0]
 #         loss.backward()
 #         optimizer.step()
-print('训练时间：', time.time() - pre)
+logging.info('训练时间：', time.time() - pre)

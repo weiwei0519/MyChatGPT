@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler
-import os, time
+import os, time, datetime
 # Importing the T5 modules from huggingface/transformers
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from utils.dataset_util import PromptSrcTgtDataset
@@ -28,9 +28,18 @@ from rich.table import Column, Table
 from rich import box
 from rich.console import Console
 
+
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/prompt_model/prompt_model_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
+
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(device)
+logging.info(device)
 if device == 'gpu': print_gpu_info()  # 输出当前服务器的GPU信息。
 logging.basicConfig(level=logging.INFO)
 # 做一些相关的配置(打印显示；GPU设置)
@@ -58,20 +67,19 @@ def convert_json_to_csv(source_file, target_file):
        target_file：转化后的文件
     """
     lines = open(source_file, 'r', encoding='utf8').readlines()
-    print("length of lines:", len(lines))
+    logging.info("length of lines:", len(lines))
     input_list = []
     output_list = []
     answer_choices_list = []
     type_list = []
     for i, line in enumerate(lines):
-        # {"input": "以下内容为真：“滁县地区专员张友道说:大都架到高处了”那么下面的陈述：“张友道对身边的官员说了话。”是真的,假的,或未知？\n答案：", "target": "未知", "answer_choices": ["真的", "假的", "未知"], "type": "nli"}
         # 1)获得字段值
         json_string = json.loads(line.strip())
         input_ = json_string["input"].replace("\n", "_")
         output_ = json_string["target"]
         answer_choices_ = json_string.get("answer_choices", [])
         type_ = json_string["type"]
-        if i < 10: print(i, "input:", input_, ";output:", output_)
+        if i < 10: logging.info(i, "input:", input_, ";output:", output_)
         # 2)添加到列表中
         input_list.append(input_)
         output_list.append(output_)
@@ -141,7 +149,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
         # 每100步打印日志
         if _ % 100 == 0 and _ != 0:
             time2 = time.time()
-            print(_, "epoch:" + str(epoch) + "-loss:" + str(loss.item()) + ";each step's time spent:" + str(
+            logging.info(_, "epoch:" + str(epoch) + "-loss:" + str(loss.item()) + ";each step's time spent:" + str(
                 float(time2 - time1) / float(_ + 0.0001)))
             # training_logger.add_row(str(epoch), str(_), str(loss))
             # console.print(training_logger)
@@ -287,7 +295,7 @@ def T5Trainer(
     logging.info(f"[Initiating Fine Tuning]...\n")
     logging.info('total epoch: {0}'.format(model_params["TRAIN_EPOCHS"]))
     for epoch in range(model_params["TRAIN_EPOCHS"]):
-        print(f"epoch = {epoch}")
+        logging.info(f"epoch = {epoch}")
         # 1) train for one epoch
         train(epoch, tokenizer, model, device, training_loader, optimizer)
 
@@ -333,8 +341,8 @@ if __name__ == '__main__':
     #   - target: 目标输出
     df = pd.read_csv('./datasets/prompt/pCLUE_train.csv')  # 数据量：1200k数据。
     df = df.sample(frac=0.01)  # 测试只取1%作为训练样本
-    print("df.head:", df.head(n=5))
-    print("df.shape:", df.shape)
+    logging.info("df.head:", df.head(n=5))
+    logging.info("df.shape:", df.shape)
     # 显存占用说明：如果运行现在显存不足，请使用nvidia-smi查看显存；如果显卡多数被占用了，请重启colab程序
     T5Trainer(
         dataframe=df,

@@ -22,18 +22,18 @@ while True:
         break
     else:
         try:
-            response = openai.Completion.create(
-                model="text-davinci-003",  # 这里我们使用的是davinci-003的模型，准确度更高。
-                prompt=prompt,
-                temperature=1,
-                max_tokens=2000,  # 这里限制的是回答的长度，你可以限制字数，如:写一个300字作文等。
-                frequency_penalty=0,
-                presence_penalty=0
-            )
-            print(start_sequence, response["choices"][0]["text"].strip())
-            # completion = openai.ChatCompletion.create(model='gpt-3.5-turbo',
-            #                                           messages=[{"role": "user", "content": prompt}],
-            #                                           )
-            # print(completion)
+            # response = openai.Completion.create(
+            #     model="text-davinci-003",  # 这里我们使用的是davinci-003的模型，准确度更高。
+            #     prompt=prompt,
+            #     temperature=1,
+            #     max_tokens=2000,  # 这里限制的是回答的长度，你可以限制字数，如:写一个300字作文等。
+            #     frequency_penalty=0,
+            #     presence_penalty=0
+            # )
+            # print(start_sequence, response["choices"][0]["text"].strip())
+            completion = openai.ChatCompletion.create(model='gpt-3.5-turbo',
+                                                      messages=[{"role": "user", "content": prompt}],
+                                                      )
+            print(completion)
         except Exception as exc:  # 捕获异常后打印出来
             print(exc)

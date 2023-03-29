@@ -15,10 +15,19 @@ import inspect
 import subprocess
 import json
 import pprint
+import logging
 
 import torch
 from torch import nn
 import numpy as np
+
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/test/test_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 dtype_memory_size_dict = {
     torch.float64: 64 / 8,
@@ -48,7 +57,7 @@ def get_mem_space(x):
     try:
         ret = dtype_memory_size_dict[x]
     except KeyError:
-        print(f"dtype {x} is not supported!")
+        logging.error(f"dtype {x} is not supported!")
     return ret
 
 
@@ -81,7 +90,7 @@ class MemTracker(object):
                     yield tensor
             except Exception as e:
                 if self.verbose:
-                    print('A trivial exception occured: {}'.format(e))
+                    logging.error('A trivial exception occured: {}'.format(e))
 
     def get_tensor_usage(self):
         sizes = [np.prod(np.array(tensor.size())) * get_mem_space(tensor.dtype) for tensor in self.get_tensors()]
@@ -96,7 +105,7 @@ class MemTracker(object):
 
     def print_all_gpu_tensor(self, file=None):
         for x in self.get_tensors():
-            print(x.size(), x.dtype, np.prod(np.array(x.size())) * get_mem_space(x.dtype) / 1024 ** 2, file=file)
+            logging.info(x.size(), x.dtype, np.prod(np.array(x.size())) * get_mem_space(x.dtype) / 1024 ** 2, file=file)
 
     def track(self):
         """
@@ -154,7 +163,7 @@ def print_gpu_info(nvidia_smi_path='nvidia-smi', keys=DEFAULT_ATTRIBUTES, no_uni
     lines = output.decode().split('\n')
     lines = [line.strip() for line in lines if line.strip() != '']
 
-    print([{k: v for k, v in zip(keys, line.split(', '))} for line in lines])
+    logging.info([{k: v for k, v in zip(keys, line.split(', '))} for line in lines])
 
 
 # 模型显存占用监测函数
@@ -164,7 +173,7 @@ def print_gpu_info(nvidia_smi_path='nvidia-smi', keys=DEFAULT_ATTRIBUTES, no_uni
 
 def modelsize(model, input, type_size=4):
     para = sum([np.prod(list(p.size())) for p in model.parameters()])
-    print('Model {} : params: {:4f}M'.format(model._get_name(), para * type_size / 1000 / 1000))
+    logging.info('Model {} : params: {:4f}M'.format(model._get_name(), para * type_size / 1000 / 1000))
 
     input_ = input.clone()
     input_.requires_grad_(requires_grad=False)
@@ -187,7 +196,7 @@ def modelsize(model, input, type_size=4):
         nums = np.prod(np.array(s))
         total_nums += nums
 
-    print('Model {} : intermedite variables: {:3f} M (without backward)'
+    logging.info('Model {} : intermedite variables: {:3f} M (without backward)'
           .format(model._get_name(), total_nums * type_size / 1000 / 1000))
-    print('Model {} : intermedite variables: {:3f} M (with backward)'
+    logging.info('Model {} : intermedite variables: {:3f} M (with backward)'
           .format(model._get_name(), total_nums * type_size * 2 / 1000 / 1000))

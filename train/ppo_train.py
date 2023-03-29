@@ -10,7 +10,7 @@
 """
 
 import os
-import time
+import time, datetime
 import random
 
 import torch
@@ -23,11 +23,19 @@ from model.T5_model import T5ModelWithValueModel
 from model.ppo_model import PPOModel
 from utils.training_logger import LoggerWriter
 import json
+import logging
 
-writer = LoggerWriter(log_path='../logs/ppo_train', log_name='PPO-train-Zh')
+writer = LoggerWriter(log_path='../logs/ppo/ppo_train', log_name='PPO-train-Zh')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 pipe_device = 0 if torch.cuda.is_available() else -1
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/ppo/ppo_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 # GPT基础语言模型
 gpt2_model_dir = '../models/chatgpt-aia-chinese/gpt-aia-chinese'
@@ -187,7 +195,7 @@ for epoch in tqdm(range(total_ppo_epochs)):
     logs['env/reward_mean'] = torch.mean(rewards_tensor).cpu().numpy()
     logs['env/reward_std'] = torch.std(rewards_tensor).cpu().numpy()
     logs['env/reward_dist'] = rewards_tensor.cpu().numpy()
-    print(f"epoch {epoch} mean-reward: {logs['env/reward_mean']}")
+    logging.info(f"epoch {epoch} mean-reward: {logs['env/reward_mean']}")
 
     writer.add_scalar('train/reward', logs['env/reward_mean'], epoch)
     for k, v in timing.items():
