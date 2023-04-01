@@ -19,7 +19,7 @@ import logging
 import os
 import glob
 import random
-import time
+import time, datetime
 from random import sample
 from tqdm import tqdm
 import io
@@ -39,7 +39,13 @@ from typing import Optional, Tuple
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-logging.basicConfig(level=logging.INFO)
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/gpt2/gpt2_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 # 追踪GPU Mem的消耗情况。
 frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)

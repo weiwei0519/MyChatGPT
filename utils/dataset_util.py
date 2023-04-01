@@ -14,6 +14,16 @@ from torch.utils.data import Dataset
 from random import sample
 import numpy as np
 import traceback
+import datetime
+import logging
+
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/utils/utils_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+)
 
 
 def preprocess(text):
@@ -35,7 +45,7 @@ class InputOutputDataset(Dataset):
     """
 
     def __init__(
-            self, tokenizer, source_len, target_len, source_texts, target_texts
+            self, tokenizer, source_texts, target_texts, text_length, input_ids_length,
     ):
         """
         Initializes a Dataset class
@@ -48,12 +58,12 @@ class InputOutputDataset(Dataset):
             target_texts (str): column name of target text
         """
         self.tokenizer = tokenizer
-        self.source_len = source_len
-        self.target_len = target_len
+        self.text_length = text_length
+        self.input_ids_length = input_ids_length
         self.source_texts = source_texts
         self.target_texts = target_texts
-        self.source_shape = (len(source_texts), source_len)
-        self.target_shape = (len(target_texts), target_len)
+        self.source_shape = (len(source_texts), self.text_length)
+        self.target_shape = (len(target_texts), self.input_ids_length)
 
     def __len__(self):
         """returns the length of dataframe"""
@@ -67,12 +77,12 @@ class InputOutputDataset(Dataset):
         target_text = preprocess(str(self.target_texts[index]))
 
         # cleaning data so as to ensure data is in string type
-        source_text = " ".join(source_text.split())
-        target_text = " ".join(target_text.split())
+        # source_text = "".join(source_text.split())
+        # target_text = "".join(target_text.split())
 
         source = self.tokenizer.batch_encode_plus(
             [source_text],
-            max_length=self.source_len,
+            max_length=self.text_length,
             pad_to_max_length=True,
             truncation=True,
             padding="max_length",
@@ -80,7 +90,7 @@ class InputOutputDataset(Dataset):
         )
         target = self.tokenizer.batch_encode_plus(
             [target_text],
-            max_length=self.target_len,
+            max_length=self.input_ids_length,
             pad_to_max_length=True,
             truncation=True,
             padding="max_length",
@@ -451,7 +461,7 @@ def dataset_process(dataset: dict, tokenizer, max_seq_len: int):
         try:
             rank_texts = line.strip().split('\t')
         except:
-            print(f'"{line}" -> {traceback.format_exc()}')
+            logging.error(f'"{line}" -> {traceback.format_exc()}')
             exit()
 
         rank_texts_prop = {

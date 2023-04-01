@@ -13,6 +13,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import os
 import time
+import datetime
 import glob
 import numpy as np
 from transformers import Trainer, TrainingArguments, DataCollatorWithPadding, get_linear_schedule_with_warmup
@@ -31,7 +32,13 @@ from rich.console import Console
 # 做一些相关的配置(打印显示；GPU设置)
 # define a rich console logger
 console = Console(record=True)
-logging.basicConfig(level=logging.INFO)
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/gpt2/gpt2_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 
 def train(epoch, tokenizer, model, device, loader, optimizer):
@@ -64,7 +71,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
         # 每100步打印日志
         if _ % 1 == 0 and _ != 0:
             time2 = time.time()
-            print(_, "epoch:" + str(epoch) + "-loss:" + str(loss) + ";each step's time spent:" + str(
+            logging.info(_, "epoch:" + str(epoch) + "-loss:" + str(loss) + ";each step's time spent:" + str(
                 float(time2 - time1) / float(_ + 0.0001)))
             # training_logger.add_row(str(epoch), str(_), str(loss))
             # console.print(training_logger)

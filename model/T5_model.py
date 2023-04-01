@@ -8,6 +8,8 @@
 # IDE: PyCharm
 # Describe: 
 """
+import sys
+sys.path.append("../")
 
 import torch
 from torch import nn
@@ -18,6 +20,7 @@ import logging
 import os
 import random
 import time
+import datetime
 from tqdm import tqdm
 import io
 import glob
@@ -34,18 +37,25 @@ import docx2txt
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
-print(device)
-logging.basicConfig(level=logging.INFO)
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/T5/T5_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
+logging.info(device)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"  # 防止GPU内存溢出
 # 追踪GPU Mem的消耗情况。
 frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 16
-epochs = 2000
+batch_size = 2
+epochs = 10000
 learning_rate = 1e-5  # 学习率
-context_length = 512
+text_length = 50
+input_ids_length = 400
 action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
 pretrained_model_dir = "../models/ChatYuan-large-v1/"
 model_output_dir = "../models/chatgpt-aia-chinese/ttt-aia-chinese"
@@ -222,77 +232,39 @@ def train():
     elif action == 'fine-tuning':
         tokenizer = T5Tokenizer.from_pretrained(model_output_dir)
         config = T5Config.from_pretrained(model_output_dir)
-        model = T5ForConditionalGeneration.from_pretrained(model_output_dir)
+        # model = T5ForConditionalGeneration.from_pretrained(model_output_dir)
+        model = T5ForConditionalGeneration(config)
         model.to(device)
     else:
         # 初始化预训练模型
         tokenizer = T5Tokenizer.from_pretrained(pretrained_model_dir)
+        tokenizer.to(device)
         config = T5Config.from_pretrained(pretrained_model_dir)
         model = T5ForConditionalGeneration(config)
         model.to(device)
     model_size = sum(t.numel() for t in model.parameters())
-    print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
+    logging.info(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     # gpu_tracker.track()
 
     # 数据集
-    if action == 'train':
-        window = 1  # 该参数为定义需要最多包含window个数的输入句子。
-        doc_path = '../datasets/company_datasets/aiacn/'
-        files = os.listdir(doc_path)
-        paraphs = []
-        for file in files:
-            paraphs.extend(
-                docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
-        # print(paraphs)
-        sentences = []
-        for paraph in paraphs:
-            if len(paraph) < 10 and (not paraph.endswith('。')) and (not paraph.endswith('？')):
-                continue
-            paraph = paraph.replace("。", "。[SEP]")
-            paraph = paraph.replace("？", "？[SEP]")
-            if paraph.endswith('[SEP]'):
-                paraph = paraph[:-5]
-            for sentence in paraph.split('[SEP]'):
-                if len(sentence) > 1:
-                    sentences.append(sentence)
-        # print(sentences)
-        source_texts = []
-        target_texts = []
-        source = []
-        target = []
-        for w in range(1, window + 1):
-            for i in range(len(sentences) - 1):
-                source = "".join(sentences[i:i + w])
-                target = "".join(sentences[i + w:i + w + 1])
-                source_texts.append(source)
-                target_texts.append(target)
-        src_max_len = max([len(text) for text in source_texts])
-        tgt_max_len = max([len(text) for text in target_texts])
-        train_set = InputOutputDataset(tokenizer=tokenizer,
-                                       source_texts=source_texts,
-                                       target_texts=target_texts,
-                                       source_len=src_max_len,
-                                       target_len=tgt_max_len,
-                                           )
-    elif action == 'fine-tuning':
-        file = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
-        content = pd.read_excel(file)
-        print(content.head(5))
-        text_pairs = content.iloc[:, [0, 1]]
-        # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
-        # texts_pairs = [[w for w in l.split('>>>')] for l in lines]
-        # source_texts, target_texts = zip(*texts_pairs)
-        source_texts = content.iloc[:, 0].values.tolist()
-        target_texts = content.iloc[:, 1].values.tolist()
-        src_max_len = max([len(text) for text in source_texts])
-        tgt_max_len = max([len(text) for text in target_texts])
-        train_set = InputOutputDataset(tokenizer=tokenizer,
-                                       source_texts=source_texts,
-                                       target_texts=target_texts,
-                                       source_len=src_max_len,
-                                       target_len=tgt_max_len,
-                                       )
-    print('dataset''s shape = {0}, {1}'.format(train_set.source_shape, train_set.target_shape))
+    file = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
+    content = pd.read_excel(file)
+    logging.info(content.head(5))
+    text_pairs = content.iloc[:, [0, 1]]
+    # lines = io.open(file, encoding='UTF-8').read().strip().split('\n')
+    # texts_pairs = [[w for w in l.split('>>>')] for l in lines]
+    # source_texts, target_texts = zip(*texts_pairs)
+    source_texts = content.iloc[:, 0].values.tolist()
+    target_texts = content.iloc[:, 1].values.tolist()
+    src_max_len = max([len(text) for text in source_texts])
+    tgt_max_len = max([len(text) for text in target_texts])
+    train_set = InputOutputDataset(tokenizer=tokenizer,
+                                   source_texts=source_texts,
+                                   target_texts=target_texts,
+                                   text_length=text_length,
+                                   input_ids_length=input_ids_length,
+                                   )
+    logging.info('dataset''s shape = {0}, {1}'.format(train_set.source_shape, train_set.target_shape))
 
     # 开始模型训练
     pre = time.time()
@@ -311,33 +283,35 @@ def train():
         model_dir=model_output_dir,
     )
     # trainer.evaluate()
-    print('训练时间：', time.time() - pre)
+    logging.info('训练时间：', time.time() - pre)
 
 
-def infer_answer(model, tokenizer, text, do_sample=True, samples=1, top_p=1, temperature=0.7):
+def infer_answer(model, tokenizer, text, out_length, do_sample=True, samples=1, top_p=1, temperature=0.7):
     '''sample：是否抽样。生成任务，可以设置为True;
     top_p：0-1之间，生成的内容越多样'''
+    logging.info(f"input text: {text}")
     text = preprocess(text)
     encoding = tokenizer(text=[text],
                          truncation=True,
                          pad_to_max_length=True,
                          padding='max_length',
-                         max_length=context_length,
+                         max_length=text_length,
                          return_tensors="pt").to(device)
 
     if not do_sample:
         out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False,
-                             max_new_tokens=512,
+                             max_new_tokens=out_length,
                              num_beams=1, length_penalty=0.6)
     else:
         out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False,
-                             max_new_tokens=512, do_sample=do_sample,
+                             max_new_tokens=out_length, do_sample=do_sample,
                              top_p=top_p, temperature=temperature,
                              num_return_sequences=samples,
                              no_repeat_ngram_size=3)
     out_text = tokenizer.batch_decode(out["sequences"], skip_special_tokens=True)
-    print(f'out_text {out_text}')
-    return [postprocess(text) for text in out_text]
+    out_text = [postprocess(text) for text in out_text]
+    logging.info(f'out_text {out_text}')
+    return out_text
 
 
 # 模型测试
@@ -366,6 +340,7 @@ if __name__ == '__main__':
                 output_text = infer_answer(model=model,
                                            tokenizer=tokenizer,
                                            text=input_text,
+                                           out_length=input_ids_length,
                                            samples=1,
                                            )
                 print(output_text)

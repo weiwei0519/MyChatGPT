@@ -158,13 +158,11 @@ def calc_TF(text, sort=False):
 
 
 def load_dictionary(path='./dictionary/dictionary.txt'):
-    # print("load dictionary start_time: {0}".format(datetime.datetime.now()))
     dic = []
     with open(path, 'r', encoding='UTF-8', errors='ignore') as f:
         for line in f:
             dic.extend(word for word in line.strip().split(" "))
     print("loaded dictionary has {0} words.".format(len(dic)))
-    # print("load dictionary end_time: {0}".format(datetime.datetime.now()))
     return dic
 
 
@@ -174,7 +172,6 @@ def intent_judge(text):
     with open(path, 'r', encoding='UTF-8', errors='ignore') as f:
         for line in f:
             intention_dic.extend(word for word in line.strip())
-    # print("loaded dictionary has {0} words.".format(len(intention_dic)))
     # 简单判断输入text是chat意图还是非chat意图
     for w in intention_dic:
         if w in text:

@@ -10,15 +10,28 @@
 '''
 
 import os
-
 import streamlit as st
 import torch
 import json
 from PIL import Image
+import logging
+import datetime
 from transformers import AutoTokenizer, GPT2LMHeadModel, TextGenerationPipeline
 from transformers import T5ForConditionalGeneration, T5Tokenizer, T5Config
 from model.T5_model import infer_answer
+from steamship import Steamship
 # from streamlit_autorefresh import st_autorefresh
+import urllib3
+
+urllib3.disable_warnings()
+
+today = datetime.datetime.now().strftime("%Y-%m-%d")
+logging.basicConfig(filename=f'./logs/labeler/labeler_{today}.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    filemode='a'
+                    )
 
 st.set_page_config(
     page_title="AIA-GPT 管理平台",
@@ -29,10 +42,10 @@ st.set_page_config(
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 MODEL_CONFIG = {
-    'model_name': './models/ChatYuan-large-v1',  # backbone
+    'model_name': './models/chatgpt-aia-chinese/ttt-aia-chinese',  # backbone
     'dataset_file': './datasets/company_datasets/human_rank_pairs.json',  # 标注数据集的存放文件
     'rank_list_len': 3,  # 排序列表的长度
-    'max_gen_seq_len': 512,  # 生成答案最大长度
+    'max_gen_seq_len': 400,  # 生成答案最大长度
 }
 
 ######################## 页面配置初始化 ###########################
@@ -51,13 +64,16 @@ RANK_COLOR = [
 # model.to(device)
 
 # 加载Company预训练模型
-tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
-config = T5Config.from_pretrained(MODEL_CONFIG['model_name'])
-model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
-model.to(device)
+if 'model' not in st.session_state:
+    tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
+    config = T5Config.from_pretrained(MODEL_CONFIG['model_name'])
+    model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
+    model.to(device)
+    st.session_state['tokenizer'] = tokenizer
+    st.session_state['config'] = config
+    st.session_state['model'] = model
 
 ######################## 会话缓存初始化 ###########################
-print('request & response!')
 
 if 'prompt' not in st.session_state:
     st.session_state['prompt'] = ''
@@ -78,13 +94,27 @@ if 'rank_choices' not in st.session_state:
         rank_choices.append(str(i + 1))
     st.session_state['rank_choices'] = rank_choices
 
+# 加载GPT4 client
+if 'GPT4_client' not in st.session_state:
+    # client = Steamship(workspace="gpt-4", api_key='E7A97033-8208-452F-945D-782EA5E011AC', verify=False)
+    # # create text generator from steamship client
+    # generator = client.use_plugin('gpt-4')
+    # st.session_state['GPT4_client'] = generator
+    st.session_state['GPT4_client'] = ''
+
+if 'program_prompt' not in st.session_state:
+    st.session_state['program_prompt'] = ''
+
+if 'program_answer' not in st.session_state:
+    st.session_state['program_answer'] = ''
+
 
 ######################### 函数定义区 ##############################
 def generate_text(prompt, do_sample):
     """
     模型生成文字。
     """
-    print(f'prompt: {prompt}')
+    logging.info(f'AIA-GPT prompt: {prompt}')
     # current_results = []
     # for _ in range(MODEL_CONFIG['rank_list_len']):
     #     if st.session_state['current_prompt'] != '':
@@ -101,17 +131,24 @@ def generate_text(prompt, do_sample):
         # 标注模式
         action = '标注模式'
         return_seqs = MODEL_CONFIG['rank_list_len']
+        logging.info(f'action: {action}')
     else:
         # 问答模式
         action = '问答模式'
         return_seqs = 1
+        logging.info(f'action: {action}')
+    tokenizer = st.session_state['tokenizer']
+    model = st.session_state['model']
     answers = infer_answer(text=prompt,
                            tokenizer=tokenizer,
                            model=model,
                            # do_sample=do_sample,
-                           samples=return_seqs
+                           samples=return_seqs,
+                           out_length=MODEL_CONFIG['max_gen_seq_len'],
                            )
-    print(f'answer in generator: {len(answers)} x {len(answers[0])}')
+    answers = [answer.replace('\n', '<br>').replace('\t', '   ') for answer in answers]
+    logging.info(f'answer in generator: {len(answers)} x {len(answers[0])}')
+    logging.info(f'answer in generator: {answers}')
     if action == '标注模式':
         st.session_state['answer_to_rank'] = {}
         for _, answer in enumerate(answers):
@@ -120,36 +157,79 @@ def generate_text(prompt, do_sample):
         st.session_state['answer'] = answers[0]
 
 
+def generate_from_GPT4(prompt):
+    logging.info(f'GPT4 prompt: {prompt}')
+    generator = st.session_state['GPT4_client']
+    task = generator.generate(text=prompt)
+    task.wait()
+    response = task.output.blocks[0].text
+    # print(f'GPT4 answer is: {response}')
+    st.session_state['program_answer'] = response
+
+
+
 ######################### 页面定义区（侧边栏） ########################
 with st.sidebar:
     st.image(Image.open('./images/AIA_logo.png'))
     st.sidebar.title('📌 AIA-GPT 管理平台')
     st.sidebar.markdown('''
-        ```python
-        提供生成式提问测试，以及内容的排序标注
-        
+    ```python
+    提供基于GPT模型的生成式内容提问:
+    
+    Tab 1:
+        Prompt Tab：问答模式。
+            用户输入提示问题，系统输出唯一答案。
+    
+    Tab 2:
         Label Tab：标注模式。
             用户输入提示问题，系统输出多个答案。
             用户根据答案的准确性进行排序。
             
-        Prompt Tab：问答模式。
-            用户输入提示问题，系统输出唯一答案。
-            
-        ```
+    Tab 3:
+        Program：代码辅助工具
+            基于需求生成代码。
+            基于代码，提供解读。
+            代码bug发现与修复建议。
+            代码单元测试建议。
+            为既有代码添加注释。
+    
+    ```
     ''')
 
-label_tab, prompt_tab = st.tabs(['Label', 'Prompt'])
+prompt_tab, label_tab, program_tab = st.tabs(['Prompt', 'Label', 'Program'])
 answer_to_rank = []
+st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: left;} </style>',
+         unsafe_allow_html=True)
+
+# st.write('<style>div.st-bf{flex-direction:row;} div.st-ag{font-weight:bold;padding-left:2px;}</style>',
+#          unsafe_allow_html=True)
+
+######################### 页面定义区（问答页面） ########################
+with prompt_tab:
+    st.subheader(':blue[AIA-GPT对话问答]')
+    with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
+        qa_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='qa_query')
+        if qa_query_txt != '' and st.session_state['prompt'] != qa_query_txt:
+            st.session_state['prompt'] = qa_query_txt
+            generate_text(st.session_state['prompt'], do_sample=False)
+
+    with st.expander('💡 GPT的回答如下：', expanded=True):
+        if 'answer' in st.session_state:
+            answer = st.session_state['answer']
+            if answer != '':
+                color = RANK_COLOR[0]
+                st.markdown(f":{color}[{answer}]", unsafe_allow_html=True)
 
 ######################### 页面定义区（标注页面） ########################
 with label_tab:
-    with st.expander('AIA-GPT对话问答专区', expanded=True):  # expanded 是展开还是收缩状态
+    st.subheader(':blue[AIA-GPT对话问答]')
+    with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
         label_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='label_query')
         if label_query_txt != '' and st.session_state['query'] != label_query_txt:
             st.session_state['query'] = label_query_txt
             generate_text(st.session_state['query'], do_sample=True)
 
-    with st.expander('GPT的回答如下：', expanded=True):
+    with st.expander('💡 GPT的回答如下：', expanded=True):
         answer_to_rank = st.session_state['answer_to_rank']
         if len(answer_to_rank) > 0:
             rank_choices = st.session_state['rank_choices']
@@ -173,7 +253,7 @@ with label_tab:
                             st.markdown(f":{color}[{answer}]")
                         else:
                             color = 'white'
-                            st.markdown(f":{color}[{answer}]")
+                            st.markdown(f":{color}[{answer}]", unsafe_allow_html=True)
                 # st.session_state['answer_to_rank'] = answer_to_rank
 
             # 手工写答案
@@ -188,9 +268,6 @@ with label_tab:
                 if input_answer != '' and add_button:
                     st.session_state['answer_to_rank'][input_answer] = '0'
                     st.success('成功添加手工答案，请点击按钮存储当前排序', icon="✅")
-                    # color = RANK_COLOR[0]
-                    # st.markdown(f":{color}[{input_answer}]")
-                # st.session_state['answer_to_rank'] = answer_to_rank
 
         else:
             rank_col, answer_col = st.columns([1, 10])
@@ -200,7 +277,6 @@ with label_tab:
                 st.text("💡 Generate Answers")
 
     answer_to_rank_new = st.session_state['answer_to_rank']
-    print(f'answer_to_rank: {answer_to_rank_new}')
 
     save_button = st.button('存储当前排序')
     if save_button:
@@ -216,16 +292,9 @@ with label_tab:
             else:
                 rank_list.append(rank)
 
-        # with open(MODEL_CONFIG['dataset_file'], 'a', encoding='utf8') as f:
-        #     rank_texts = []
-        #     for i in range(len(rank_results)):
-        #         rank_texts.append(st.session_state['current_results'][rank_results.index(i + 1)])
-        #     line = '\t'.join(rank_texts)
-        #     f.write(f'{line}\n')
         file = open(MODEL_CONFIG['dataset_file'], 'r+', encoding='utf8')
-        print(f'file information: {file}')
         content = file.read()
-        print(f'orignal file content: {content}')
+        # logging.info(f'orignal file content: {content}')
         file.seek(0)
         file.truncate()
         if len(content) != 0 and content != '':
@@ -233,7 +302,7 @@ with label_tab:
         else:
             rank_pairs = {}
         length = len(rank_pairs)
-        print(f'orignal json length: {length}')
+        logging.info(f'orignal json length: {length}')
         rank_pairs[length] = {}
         rank_pairs[length]['prompt'] = st.session_state['prompt'].strip()
         ranking = {}
@@ -243,7 +312,7 @@ with label_tab:
         rank_pairs[length]['ranked_answers'] = ranked_answers
         # dumps()：将dict数据转化成json数据；   dump()：将dict数据转化成json数据后写入json文件
         content = json.dumps(rank_pairs, ensure_ascii=False, indent=2)
-        print(f'file save content {content}')
+        logging.info(f'file save content length {len(content)}')
         # json.dump(content, file, ensure_ascii=False, indent=2)
         file.write(content)
         file.flush()
@@ -253,18 +322,47 @@ with label_tab:
         # st._rerun()
         # st_autorefresh(interval=2000, limit=100, key="fizzbuzzcounter")
 
-######################### 页面定义区（问答页面） ########################
-with prompt_tab:
-    with st.expander('AIA-GPT对话问答专区', expanded=True):  # expanded 是展开还是收缩状态
-        qa_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='qa_query')
-        if qa_query_txt != '' and st.session_state['prompt'] != qa_query_txt:
-            st.session_state['prompt'] = qa_query_txt
-            generate_text(st.session_state['prompt'], do_sample=False)
+######################### 页面定义区（代码辅助工具页面） ########################
+with program_tab:
+    st.subheader(':blue[提供面向IT开发人员的代码辅助工具]')
+    with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
+        func_options = ('请选择：', '生成代码', '代码解读', '修复bug', '单元测试', '添加注释')
+        # gene_tab, read_tab, bug_tab, test_tab, comment_tab = st.tabs(func_options)
+        func_radio = st.radio(label='请选择您的需求：',
+                              options=func_options,
+                              index=0,
+                              key='func_options',
+                              )
+        lang_options = ('Java', 'SQL', 'Vue.js', 'Python', 'C++', 'Cobol', 'Swift')
+        lang_radio = st.radio(label='请选择您代码的语言：',
+                              options=lang_options,
+                              index=0,
+                              key='lang_options_gene',
+                              )
+        prompt = ""
+        if func_radio == '生成代码':
+            prompt = "请帮我生成一段" + lang_radio + "代码，需求是：\n"
+        elif func_radio == '代码解读':
+            prompt = "请帮我总结如下" + lang_radio + "代码的用途，代码是：\n"
+        elif func_radio == '修复bug':
+            prompt = "请帮我发现并修复如下" + lang_radio + "代码中存在的问题，代码是：\n"
+        elif func_radio == '单元测试':
+            prompt = "请帮我生成如下" + lang_radio + "代码的单元测试，代码是：\n"
+        elif func_radio == '添加注释':
+            prompt = "请帮我为如下" + lang_radio + "代码添加注释，代码是：\n"
+        program_request = st.text_area(label='🔍 选择哪种程序语言后，请再输入您的详细需求：',
+                                       placeholder='此处输入您的详细需求',
+                                       value=prompt,
+                                       height=200,
+                                       key='program_prompt')
+        ask = st.button('提问')
+        if ask and program_request != '':
+            last_program_prompt = st.session_state['program_prompt']
+            # st.session_state['program_prompt'] = program_request
+            generate_from_GPT4(program_request)
 
-    with st.expander('GPT的回答如下：', expanded=True):
-        if 'answer' in st.session_state:
-            answer = st.session_state['answer']
-            st.text("💡 Generated Answers")
-            if answer != '':
-                color = RANK_COLOR[0]
-                st.markdown(f":{color}[{answer}]")
+        if 'program_answer' in st.session_state and st.session_state['program_answer'] != '':
+            answer = st.session_state['program_answer']
+            st.text("💡 GPT的回答如下：")
+            color = RANK_COLOR[0]
+            st.markdown(f":{color}[{answer}]")
