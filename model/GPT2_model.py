@@ -126,7 +126,7 @@ def train():
         model.to(device)
 
     model_size = sum(t.numel() for t in model.parameters())
-    print(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
+    logging.info(f"model size: {model_size / 1000 ** 2:.1f}M parameters")
     # gpu_tracker.track()
 
     # 初始训练，基于原始doc格式文本数据集进行GPT模型训练
@@ -140,7 +140,7 @@ def train():
     elif action == 'fine-tuning':
         doc_path = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
         content = pd.read_excel(doc_path)
-        print(content.head(5))
+        logging.info(content.head(5))
         text_pairs = content.iloc[:, [0, 1]]
         source_texts = content.iloc[:, 0].values.tolist()
         target_texts = content.iloc[:, 1].values.tolist()
@@ -172,7 +172,7 @@ def train():
                            texts=sample(texts, int(0.1 * len(text))),
                            length=max_length
                            )
-    print('dataset''s shape = {0}'.format(train_set.shape))
+    logging.info('dataset''s shape = {0}'.format(train_set.shape))
 
     # 开始模型训练
     pre = time.time()
@@ -191,7 +191,7 @@ def train():
         model_dir=model_output_dir,
     )
     # trainer.evaluate()
-    print('训练时间：', time.time() - pre)
+    logging.info('训练时间：', time.time() - pre)
 
 
 # 模型测试

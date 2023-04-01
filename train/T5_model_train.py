@@ -152,7 +152,7 @@ def callback_func():
 def model_train(
         tokenizer, model, dataset, batch_size, epochs, learning_rate, device, action,
         model_dir="../models/chatgpt-aia-chinese/ttt-aia-chinese",
-        log_dir='../logs/TTT-train/',
+        log_dir='../logs/T5/',
         datasets_dir='./datasets/company_datasets/',
 ):
     # 参数参考这篇文章：https://zhuanlan.zhihu.com/p/363670628

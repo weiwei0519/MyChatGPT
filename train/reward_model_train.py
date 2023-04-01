@@ -52,7 +52,7 @@ parser.add_argument("--epochs", default=1000, type=int, help="Total number of tr
 parser.add_argument("--warmup_ratio", default=0.2, type=float, help="Linear warmup over warmup_ratio * total_steps.")
 parser.add_argument("--valid_steps", default=100, type=int, required=False, help="evaluate frequecny.")
 parser.add_argument("--logging_steps", default=1, type=int, help="log interval.")
-parser.add_argument("--img_log_dir", default='../logs/reward_model_train', type=str, help="Logging image path.")
+parser.add_argument("--img_log_dir", default='../logs/reward_model', type=str, help="Logging image path.")
 parser.add_argument("--img_log_name", default='reward_model.log', type=str, help="Logging image file name.")
 args = parser.parse_args()
 
