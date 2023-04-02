@@ -1,0 +1,26 @@
+1，查询token
+   https://openapi.jijyun.cn/api/openapi/corp_token
+   request：
+    {
+    "corp_id": "gLnZxt6M21cPBoV6wIT6xYBNTIhv56Av",
+    "secret": "fE6btX6T6GluuN6b5B7MWckV2wZtYv5w"
+	}
+	response：
+	{
+    "code": 0,
+    "data": {
+        "corp_token": "3dcb9082ddc1d18222b15a6fc716e17e",
+        "expires_in": 7200
+    },
+    "msg": "成功"
+	}
+	
+2，查询子流程信息
+   https://openapi.jijyun.cn/api/openapi/query_process
+   request：
+   {
+    "corp_token": "3dcb9082ddc1d18222b15a6fc716e17e",
+	}
+	response：
+	
+   
