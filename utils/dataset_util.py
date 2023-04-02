@@ -18,7 +18,7 @@ import datetime
 import logging
 
 today = datetime.datetime.now().strftime("%Y-%m-%d")
-logging.basicConfig(filename=f'./logs/utils/utils_{today}.log',
+logging.basicConfig(filename=f'../logs/utils/utils_{today}.log',
                     level=logging.INFO,
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -152,17 +152,30 @@ class GeneDataset(Dataset):
         # cleaning data so as to ensure data is in string type
         # text = "".join(text.split())
 
-        text_encoder = self.tokenizer.batch_encode_plus(
-            [text],
+        input_text = text[:-1]
+        output_text = text[1:]
+
+        input_encoder = self.tokenizer.batch_encode_plus(
+            [input_text],
             max_length=self.max_len,
             # pad_to_max_length=True,
             truncation=True,
             padding="max_length",
             return_tensors="pt",
         )
-        text_encoder.data['labels'] = text_encoder.data['input_ids']  # 文本生成的自回归任务。
 
-        return text_encoder.data
+        label_encoder = self.tokenizer.batch_encode_plus(
+            [output_text],
+            max_length=self.max_len,
+            # pad_to_max_length=True,
+            truncation=True,
+            padding="max_length",
+            return_tensors="pt",
+        )
+
+        input_encoder.data['labels'] = label_encoder.data['input_ids']  # 文本生成的自回归任务。
+
+        return input_encoder.data
 
     def val_sample(self, sample_rate=0.1):
         indexs = sample(list(range(self.shape[0])), int(sample_rate * self.shape[0]))
