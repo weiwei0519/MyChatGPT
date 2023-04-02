@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 # device : GPU or CPU
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -51,21 +51,14 @@ frame = inspect.currentframe()  # define a frame to track
 gpu_tracker = MemTracker(frame)
 
 # 训练参数
-batch_size = 4
-epochs = 10000
+batch_size = 2
+epochs = 3000
 learning_rate = 1e-5  # 学习率
-max_length = 512
-prompt_length = 50
+text_length = 1600
+input_ids_length = 1024
 action = 'validate'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
-pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
+pretrained_model_dir = "../models/gpt2-chinese-cluecorpussmall/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
-
-# the eos and bos tokens are defined
-bos = '[endoftext]'
-cls = '[CLS]'
-eos = '[EOS]'
-pad = '[pad]'
-special_tokens_dict = {'eos_token': eos, 'bos_token': bos, 'pad_token': pad, 'cls_token': cls}
 
 
 # 但这样有时可能会出现问题，例如模型陷入一个循环，不断生成同一个单词。
@@ -107,20 +100,14 @@ def train():
         model = GPT2LMHeadModel.from_pretrained(model_output_dir)
     else:
         # 初始化空模型
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir)
-        # tokenizer.padding_side = 'right'
+        tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
         config = AutoConfig.from_pretrained(
-            pretrained_model_name_or_path=pretrained_model_dir,
-            vocab_size=len(tokenizer),
-            n_ctx=max_length,
-            bos_token_id=tokenizer.bos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
+            pretrained_model_name_or_path=model_output_dir,
         )
         # the pre-trained model is loaded with the custom configuration
-        # model = GPT2LMHeadModel(config)
-        model = GPT2LMHeadModel.from_pretrained(pretrained_model_dir, config=config)
-        num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+        model = GPT2LMHeadModel(config)
+        # model = GPT2LMHeadModel.from_pretrained(model_output_dir, config=config)
+        # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         # the model embedding is resized
         model.resize_token_embeddings(len(tokenizer))
         model.to(device)
@@ -136,7 +123,8 @@ def train():
         doc_path = '../datasets/company_datasets/aiacn/'
         files = os.listdir(doc_path)
         for file in files:
-            paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+            # paraphs.extend(docx2txt.process(doc_path + file).replace("\n\n", "\n").strip().split('\n'))
+            paraphs.append(docx2txt.process(doc_path + file))
     elif action == 'fine-tuning':
         doc_path = '../datasets/company_datasets/aiacn/Prompt_Finetuning.xlsx'
         content = pd.read_excel(doc_path)
@@ -148,29 +136,39 @@ def train():
 
     # 对于超出content_length限制的文本，需要进行拆分处理。
     for text in paraphs:
-        text = "".join(text.split())  # 去掉空格
-        length = len(text) + 2  # 需要加上bos和eos的长度
-        if length <= max_length:
-            texts.append(cls + text + eos + pad * (max_length - length))
+        # text = "".join(text.split())  # 去掉空格
+        if len(text) <= text_length:
+            texts.append(text)
         else:
             r = 0
-            for i in range(length // max_length):
-                if i == 0:
-                    texts.append(cls + text[0:max_length - 1])
-                else:
-                    texts.append(text[i * max_length - 1:(i + 1) * max_length - 1])
-                r = i
-            texts.append(text[(r + 1) * max_length - 1:-1] + eos + pad * (
-                    max_length - 1 - len(text[(r + 1) * max_length - 1:-1])))
+            for i in range(len(text) // text_length):
+                texts.append(text[i * text_length:(i + 1) * text_length])
+                r += 1
+            texts.append(text[r * text_length:len(text)])
+    # for text in paraphs:
+    #     text = "".join(text.split())  # 去掉空格
+    #     length = len(text) + 2  # 需要加上bos和eos的长度
+    #     if length <= max_length:
+    #         texts.append(cls + text + eos + pad * (max_length - length))
+    #     else:
+    #         r = 0
+    #         for i in range(length // max_length):
+    #             if i == 0:
+    #                 texts.append(cls + text[0:max_length - 1])
+    #             else:
+    #                 texts.append(text[i * max_length - 1:(i + 1) * max_length - 1])
+    #             r = i
+    #         texts.append(text[(r + 1) * max_length - 1:-1] + eos + pad * (
+    #                 max_length - 1 - len(text[(r + 1) * max_length - 1:-1])))
     del paraphs
     # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,
                             texts=texts,
-                            length=max_length
+                            length=input_ids_length
                             )
     eval_set = GeneDataset(tokenizer=tokenizer,
-                           texts=sample(texts, int(0.1 * len(text))),
-                           length=max_length
+                           texts=sample(texts, int(0.1 * len(texts))),
+                           length=input_ids_length
                            )
     logging.info('dataset''s shape = {0}'.format(train_set.shape))
 
@@ -203,7 +201,7 @@ def infer_answer(input_text, tokenizer, model, do_sample, return_seqs=1):
     text = preprocess(input_text)
     input_ids = tokenizer.encode(text, return_tensors='pt').to(device)
     generated_text_samples = model.generate(input_ids,
-                                            max_length=max_length,
+                                            max_length=text_length,
                                             num_beams=return_seqs,
                                             no_repeat_ngram_size=2,
                                             do_sample=do_sample,
@@ -228,7 +226,7 @@ def answer(text, sample=True, top_p=1, temperature=0.7):
         out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
                              num_beams=1, length_penalty=0.6)
     else:
-        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
+        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=True, max_new_tokens=512,
                              do_sample=True, top_p=top_p, temperature=temperature, no_repeat_ngram_size=3)
     out_text = tokenizer.batch_decode(out["sequences"], skip_special_tokens=True)
     return postprocess(out_text[0])

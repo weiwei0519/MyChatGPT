@@ -50,7 +50,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
     frame = inspect.currentframe()  # define a frame to track
     gpu_tracker = MemTracker(frame)
 
-    model.train()
+    model.model_train()
     time1 = time.time()
     gpu_tracker.track()
     for _, data in enumerate(loader, 0):

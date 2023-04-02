@@ -32,6 +32,7 @@ from utils.gpu_track import MemTracker
 import inspect
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import docx2txt
 
 # device : GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -236,8 +237,9 @@ def train():
         model.to(device)
     else:
         # 初始化预训练模型
-        tokenizer = T5Tokenizer.from_pretrained(model_output_dir)
-        config = T5Config.from_pretrained(model_output_dir)
+        tokenizer = T5Tokenizer.from_pretrained(pretrained_model_dir)
+        tokenizer.to(device)
+        config = T5Config.from_pretrained(pretrained_model_dir)
         model = T5ForConditionalGeneration(config)
         model.to(device)
     model_size = sum(t.numel() for t in model.parameters())

@@ -48,7 +48,7 @@ console = Console(record=True)
 
 # 定义模型的参数 let's define model parameters specific to T5 (Text-To-Text Transfer Transformer)
 model_params = {
-    "MODEL": "./models/ClueAI/PromptCLUE-base",  # model_type
+    "MODEL": "../models/ClueAI/PromptCLUE-base",  # model_type
     "TRAIN_BATCH_SIZE": 8,  # training batch size, 8
     "VALID_BATCH_SIZE": 8,  # validation batch size,8
     "TRAIN_EPOCHS": 10,  # number of training epochs
@@ -128,7 +128,7 @@ def train(epoch, tokenizer, model, device, loader, optimizer):
     Function to be called for training with the parameters passed from main function
 
     """
-    model.train()
+    model.model_train()
     time1 = time.time()
     for _, data in tqdm(enumerate(loader, 0)):
         y = data["target_ids"].to(device, dtype=torch.long)
@@ -330,8 +330,8 @@ if __name__ == '__main__':
     # 处理数据集
     # 请运行以下三行代码进行格式换行，如果你需要全量数据训练。
     # 默认将只使用部分在线的示例数据进行训练。
-    source_file = './datasets/prompt/pCLUE_train.json'
-    target_file = './datasets/prompt/pCLUE_train.csv'
+    source_file = '../datasets/prompt/pCLUE_train.json'
+    target_file = '../datasets/prompt/pCLUE_train.csv'
     convert_json_to_csv(source_file, target_file)
 
     # 训练模型
@@ -339,7 +339,7 @@ if __name__ == '__main__':
     # dataframe必须有2列:
     #   - input: 文本输入
     #   - target: 目标输出
-    df = pd.read_csv('./datasets/prompt/pCLUE_train.csv')  # 数据量：1200k数据。
+    df = pd.read_csv('../datasets/prompt/pCLUE_train.csv')  # 数据量：1200k数据。
     df = df.sample(frac=0.01)  # 测试只取1%作为训练样本
     logging.info("df.head:", df.head(n=5))
     logging.info("df.shape:", df.shape)
@@ -349,5 +349,5 @@ if __name__ == '__main__':
         source_text="input",
         target_text="target",
         model_params=model_params,
-        output_dir="./models/CompanyModel0.1-Prompt-Chinese",
+        output_dir="../models/CompanyModel0.1-Prompt-Chinese",
     )
