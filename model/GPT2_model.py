@@ -52,12 +52,12 @@ gpu_tracker = MemTracker(frame)
 
 # 训练参数
 batch_size = 2
-epochs = 10000
+epochs = 3000
 learning_rate = 1e-5  # 学习率
-text_length = 500
-context_length = 1024
-action = 'train'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
-pretrained_model_dir = "../models/Wenzhong2.0-GPT2-3.5B-chinese/"
+text_length = 1600
+input_ids_length = 1024
+action = 'validate'  # train 训练    validate 测试     prod 生产运行   checkpoint 继续训练     fine-tuning 微调模型
+pretrained_model_dir = "../models/gpt2-chinese-cluecorpussmall/"
 model_output_dir = "../models/chatgpt-aia-chinese/gpt-aia-chinese"
 
 
@@ -101,8 +101,6 @@ def train():
     else:
         # 初始化空模型
         tokenizer = AutoTokenizer.from_pretrained(model_output_dir)
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id
         config = AutoConfig.from_pretrained(
             pretrained_model_name_or_path=model_output_dir,
         )
@@ -111,7 +109,7 @@ def train():
         # model = GPT2LMHeadModel.from_pretrained(model_output_dir, config=config)
         # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         # the model embedding is resized
-        # model.resize_token_embeddings(len(tokenizer))
+        model.resize_token_embeddings(len(tokenizer))
         model.to(device)
 
     model_size = sum(t.numel() for t in model.parameters())
@@ -166,11 +164,11 @@ def train():
     # 基于texts文本数据list，创建GPT2模型数据集
     train_set = GeneDataset(tokenizer=tokenizer,
                             texts=texts,
-                            length=context_length
+                            length=input_ids_length
                             )
     eval_set = GeneDataset(tokenizer=tokenizer,
                            texts=sample(texts, int(0.1 * len(texts))),
-                           length=context_length
+                           length=input_ids_length
                            )
     print('dataset''s shape = {0}'.format(train_set.shape))
 
@@ -228,7 +226,7 @@ def answer(text, sample=True, top_p=1, temperature=0.7):
         out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
                              num_beams=1, length_penalty=0.6)
     else:
-        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=False, max_new_tokens=512,
+        out = model.generate(**encoding, return_dict_in_generate=True, output_scores=True, max_new_tokens=512,
                              do_sample=True, top_p=top_p, temperature=temperature, no_repeat_ngram_size=3)
     out_text = tokenizer.batch_decode(out["sequences"], skip_special_tokens=True)
     return postprocess(out_text[0])

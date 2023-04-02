@@ -21,6 +21,7 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer, T5Config
 from model.T5_model import infer_answer
 from steamship import Steamship
 # from streamlit_autorefresh import st_autorefresh
+import requests as req
 import urllib3
 
 urllib3.disable_warnings()
@@ -64,25 +65,34 @@ RANK_COLOR = [
 # model.to(device)
 
 # 加载Company预训练模型
-if 'model' not in st.session_state:
-    tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
-    config = T5Config.from_pretrained(MODEL_CONFIG['model_name'])
-    model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
-    model.to(device)
-    st.session_state['tokenizer'] = tokenizer
-    st.session_state['config'] = config
-    st.session_state['model'] = model
+# if 'model' not in st.session_state:
+#     tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
+#     config = T5Config.from_pretrained(MODEL_CONFIG['model_name'])
+#     model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
+#     model.to(device)
+#     st.session_state['tokenizer'] = tokenizer
+#     st.session_state['config'] = config
+#     st.session_state['model'] = model
 
 ######################## 会话缓存初始化 ###########################
 
-if 'prompt' not in st.session_state:
-    st.session_state['prompt'] = ''
+if 'aiagpt_prompt' not in st.session_state:
+    st.session_state['aiagpt_prompt'] = ''
 
-if 'query' not in st.session_state:
-    st.session_state['query'] = ''
+if 'aiagpt_query' not in st.session_state:
+    st.session_state['aiagpt_query'] = ''
 
-if 'answer' not in st.session_state:
-    st.session_state['answer'] = '我是人工智能助手，通过自然语言处理技术与用户互动。我的目标是为您提供帮助，回答问题，解决问题或提供建议。从一般性话题到专业知识，我可以提供各种领域的信息和建议。请随时向我提问，我会尽可能地帮助您！'
+if 'aiagpt_answer' not in st.session_state:
+    st.session_state['aiagpt_answer'] = ''
+
+if 'chatgpt_prompt' not in st.session_state:
+    st.session_state['chatgpt_prompt'] = ''
+
+if 'chatgpt_query' not in st.session_state:
+    st.session_state['chatgpt_query'] = ''
+
+if 'chatgpt_answer' not in st.session_state:
+    st.session_state['chatgpt_answer'] = ''
 
 if 'answer_to_rank' not in st.session_state:
     answer_to_rank = {}
@@ -102,11 +112,11 @@ if 'GPT4_client' not in st.session_state:
     # st.session_state['GPT4_client'] = generator
     st.session_state['GPT4_client'] = ''
 
-if 'program_prompt' not in st.session_state:
-    st.session_state['program_prompt'] = ''
+if 'chatgpt_program_prompt' not in st.session_state:
+    st.session_state['chatgpt_program_prompt'] = ''
 
-if 'program_answer' not in st.session_state:
-    st.session_state['program_answer'] = ''
+if 'chatgpt_program_answer' not in st.session_state:
+    st.session_state['chatgpt_program_answer'] = ''
 
 
 ######################### 函数定义区 ##############################
@@ -115,6 +125,11 @@ def generate_text(prompt, do_sample):
     模型生成文字。
     """
     logging.info(f'AIA-GPT prompt: {prompt}')
+    logging.info('加载AIAGPT model')
+    tokenizer = T5Tokenizer.from_pretrained(MODEL_CONFIG['model_name'])
+    model = T5ForConditionalGeneration.from_pretrained(MODEL_CONFIG['model_name'])
+    model.to(device)
+    logging.info('AIAGPT model加载成功')
     # current_results = []
     # for _ in range(MODEL_CONFIG['rank_list_len']):
     #     if st.session_state['current_prompt'] != '':
@@ -137,8 +152,6 @@ def generate_text(prompt, do_sample):
         action = '问答模式'
         return_seqs = 1
         logging.info(f'action: {action}')
-    tokenizer = st.session_state['tokenizer']
-    model = st.session_state['model']
     answers = infer_answer(text=prompt,
                            tokenizer=tokenizer,
                            model=model,
@@ -154,18 +167,31 @@ def generate_text(prompt, do_sample):
         for _, answer in enumerate(answers):
             st.session_state['answer_to_rank'][answer] = '-1'  # -1 为初始rank，等于未排序
     elif action == '问答模式':
-        st.session_state['answer'] = answers[0]
+        st.session_state['aiagpt_answer'] = answers[0]
+    del model, tokenizer
+    torch.cuda.empty_cache()
 
 
 def generate_from_GPT4(prompt):
     logging.info(f'GPT4 prompt: {prompt}')
-    generator = st.session_state['GPT4_client']
-    task = generator.generate(text=prompt)
-    task.wait()
-    response = task.output.blocks[0].text
+    # generator = st.session_state['GPT4_client']
+    # task = generator.generate(text=prompt)
+    # task.wait()
+    # response = task.output.blocks[0].text
     # print(f'GPT4 answer is: {response}')
-    st.session_state['program_answer'] = response
+    st.session_state['gpt4_program_answer'] = ''
 
+
+def generate_from_GPT3_from_JJY(prompt):
+    URL = 'https://openapi.jijyun.cn/api/openapi/corp_token'
+    req_body = {
+        "corp_id": "gLnZxt6M21cPBoV6wIT6xYBNTIhv56Av",
+        "secret": "fE6btX6T6GluuN6b5B7MWckV2wZtYv5w",
+        "token": prompt
+    }
+
+    response = req.post(url=URL, data=req_body)
+    st.session_state['chatgpt_answer'] = response
 
 
 ######################### 页面定义区（侧边栏） ########################
@@ -196,7 +222,8 @@ with st.sidebar:
     ```
     ''')
 
-prompt_tab, label_tab, program_tab = st.tabs(['Prompt', 'Label', 'Program'])
+AIAGPT_prompt_tab, AIAGPT_label_tab, ChatGPT_prompt_tab, ChatGPT_program_tab = st.tabs(
+    ['AIA-GPT-Prompt', 'AIA-GPT-Label', 'ChatGPT-Prompt', 'ChatGPT-Program'])
 answer_to_rank = []
 st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: left;} </style>',
          unsafe_allow_html=True)
@@ -205,29 +232,29 @@ st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content
 #          unsafe_allow_html=True)
 
 ######################### 页面定义区（问答页面） ########################
-with prompt_tab:
+with AIAGPT_prompt_tab:
     st.subheader(':blue[AIA-GPT对话问答]')
     with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
         qa_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='qa_query')
-        if qa_query_txt != '' and st.session_state['prompt'] != qa_query_txt:
-            st.session_state['prompt'] = qa_query_txt
-            generate_text(st.session_state['prompt'], do_sample=False)
+        if qa_query_txt != '' and st.session_state['aiagpt_prompt'] != qa_query_txt:
+            st.session_state['aiagpt_prompt'] = qa_query_txt
+            generate_text(st.session_state['aiagpt_prompt'], do_sample=False)
 
     with st.expander('💡 GPT的回答如下：', expanded=True):
-        if 'answer' in st.session_state:
-            answer = st.session_state['answer']
+        if 'aiagpt_answer' in st.session_state:
+            answer = st.session_state['aiagpt_answer']
             if answer != '':
                 color = RANK_COLOR[0]
                 st.markdown(f":{color}[{answer}]", unsafe_allow_html=True)
 
 ######################### 页面定义区（标注页面） ########################
-with label_tab:
+with AIAGPT_label_tab:
     st.subheader(':blue[AIA-GPT对话问答]')
     with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
         label_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='label_query')
-        if label_query_txt != '' and st.session_state['query'] != label_query_txt:
-            st.session_state['query'] = label_query_txt
-            generate_text(st.session_state['query'], do_sample=True)
+        if label_query_txt != '' and st.session_state['aiagpt_query'] != label_query_txt:
+            st.session_state['aiagpt_query'] = label_query_txt
+            generate_text(st.session_state['aiagpt_query'], do_sample=True)
 
     with st.expander('💡 GPT的回答如下：', expanded=True):
         answer_to_rank = st.session_state['answer_to_rank']
@@ -322,8 +349,24 @@ with label_tab:
         # st._rerun()
         # st_autorefresh(interval=2000, limit=100, key="fizzbuzzcounter")
 
+######################### 页面定义区（ChatGPT API页面） ########################
+with ChatGPT_prompt_tab:
+    st.subheader(':blue[ChatGPT对话问答]')
+    with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
+        cg_qa_query_txt = st.text_area('🔍 请输入您的提问：', placeholder='此处输入您的提问', key='qa_query')
+        if cg_qa_query_txt != '' and st.session_state['chatgpt_prompt'] != cg_qa_query_txt:
+            st.session_state['chatgpt_prompt'] = cg_qa_query_txt
+            generate_from_GPT3_from_JJY(st.session_state['chatgpt_prompt'])
+
+    with st.expander('💡 GPT的回答如下：', expanded=True):
+        if 'chatgpt_answer' in st.session_state:
+            answer = st.session_state['chatgpt_answer']
+            if answer != '':
+                color = RANK_COLOR[0]
+                st.markdown(f":{color}[{answer}]", unsafe_allow_html=True)
+
 ######################### 页面定义区（代码辅助工具页面） ########################
-with program_tab:
+with ChatGPT_program_tab:
     st.subheader(':blue[提供面向IT开发人员的代码辅助工具]')
     with st.expander('', expanded=True):  # expanded 是展开还是收缩状态
         func_options = ('请选择：', '生成代码', '代码解读', '修复bug', '单元测试', '添加注释')
@@ -357,12 +400,12 @@ with program_tab:
                                        key='program_prompt')
         ask = st.button('提问')
         if ask and program_request != '':
-            last_program_prompt = st.session_state['program_prompt']
+            last_program_prompt = st.session_state['chatgpt_program_prompt']
             # st.session_state['program_prompt'] = program_request
             generate_from_GPT4(program_request)
 
-        if 'program_answer' in st.session_state and st.session_state['program_answer'] != '':
-            answer = st.session_state['program_answer']
+        if 'chatgpt_program_answer' in st.session_state and st.session_state['chatgpt_program_answer'] != '':
+            answer = st.session_state['chatgpt_program_answer']
             st.text("💡 GPT的回答如下：")
             color = RANK_COLOR[0]
             st.markdown(f":{color}[{answer}]")

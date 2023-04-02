@@ -32,7 +32,7 @@ def preprocess(text):
 
 
 def postprocess(text):
-    return text.replace("\\n", "\n").replace("\\t", "\t")
+    return text.replace("\\n", "\n").replace("\\t", "\t").replace(" ", "")
 
 
 # Input text to Output text dataset
@@ -148,7 +148,7 @@ class GeneDataset(Dataset):
         """return the input ids, attention masks and target ids"""
 
         text = preprocess(str(self.texts[index]))
-
+        # text = self.texts[index]
         # cleaning data so as to ensure data is in string type
         # text = "".join(text.split())
 
@@ -160,14 +160,6 @@ class GeneDataset(Dataset):
             padding="max_length",
             return_tensors="pt",
         )
-        # text_encoder = self.tokenizer.batch_encode_plus(
-        #     [text],
-        #     max_length=self.max_len,
-        #     pad_to_max_length=True,
-        #     truncation=True,
-        #     padding="max_length",
-        #     return_tensors="pt",
-        # )
         text_encoder.data['labels'] = text_encoder.data['input_ids']  # 文本生成的自回归任务。
 
         return text_encoder.data
