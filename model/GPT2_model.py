@@ -40,7 +40,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 today = datetime.datetime.now().strftime("%Y-%m-%d")
-logging.basicConfig(filename=f'./logs/gpt2/gpt2_{today}.log',
+logging.basicConfig(filename=f'../logs/gpt2/gpt2_{today}.log',
                     level=logging.INFO,
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
